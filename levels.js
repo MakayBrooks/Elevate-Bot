@@ -249,36 +249,83 @@ async function handleCheckRank(interaction, guild) {
 }
 
 async function postShopPanel(channel) {
-  const embed = new EmbedBuilder().setColor(0xF5F0E8).setTitle('🛒 Elevate Shop')
-    .setDescription('> Spend your points on exclusive roles and badges.\n> **Earned badges** are stronger and cannot be bought.\n> Click **Check My Balance** to see your points privately.\n\u200b')
-    .addFields(
-      ...SHOP_ROLES.map(r => ({ name: `${r.name} — ${r.price} pts`, value: r.id === 'role_gold' ? 'Gold member role' : r.id === 'role_platinum' ? 'Platinum member role' : 'Elite member role — highest tier', inline: true })),
-      { name: '\u200b', value: '\u200b', inline: false },
-      ...BUYABLE_BADGES.map(b => ({ name: `${b.name} — ${b.price} pts`, value: b.description, inline: true })),
-      { name: '\u200b', value: '\u200b', inline: false },
-      { name: '🎖️ Earned Badges (Slot 1) — stronger, cannot be bought', value: ['**🥇 Top 1 / 🥈 Top 2 / 🥉 Top 3** — Reach top 3 on the leaderboard','**🚀 Elevate Booster** — Boost the server','**⭐ Lvl 5 / 🌟 Lvl 10 / 💫 Lvl 20 / 👑 Lvl 50 / 💎 Lvl 100**'].join('\n'), inline: false },
-      { name: '📋 Badge Rules', value: '• Max **1 earned badge** (Slot 1) + **1 bought badge** (Slot 2) equipped\n• Earned badges show in all bot messages\n• Use the slot buttons below to equip/swap', inline: false },
-      { name: '\u200b', value: '💡 More items coming soon!\nEarn by leveling up, chatting, VC, trading & boosting 🚀', inline: false }
+  // Main shop info embed
+  const mainEmbed = new EmbedBuilder()
+    .setColor(0xF5F0E8)
+    .setTitle('🛒 Elevate Shop')
+    .setDescription(
+      '> Spend your points on exclusive roles and badges.\n' +
+      '> **Earned badges** are stronger and cannot be bought — they must be unlocked.\n' +
+      '> Click **Check My Balance** to see your points privately.\n\u200b'
     )
-    .setFooter({ text: 'Elevate 🪽 • Shop' }).setTimestamp();
+    .addFields(
+      {
+        name: '🎖️ Earned Badges (Slot 1) — stronger, cannot be bought',
+        value: [
+          '**🥇 Top 1 / 🥈 Top 2 / 🥉 Top 3** — Reach top 3 on the leaderboard',
+          '**🚀 Elevate Booster** — Boost the server',
+          '**⭐ Lvl 5 / 🌟 Lvl 10 / 💫 Lvl 20 / 👑 Lvl 50 / 💎 Lvl 100**',
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '📋 Badge Rules',
+        value: '• Max **1 earned badge** (Slot 1) + **1 bought badge** (Slot 2) equipped\n• Earned badges show in bot messages\n• Use the equip buttons below to swap',
+        inline: false
+      },
+      { name: '\u200b', value: '💡 More items coming soon! Earn by leveling up, chatting, VC, trading & boosting 🚀', inline: false }
+    )
+    .setFooter({ text: 'Elevate 🪽 • Shop' })
+    .setTimestamp();
 
+  // Roles embed
+  const rolesEmbed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('🎭 Member Roles')
+    .setDescription('Purchase an exclusive member role. Only your **highest owned** tier will be displayed.\n\u200b')
+    .addFields(
+      ...SHOP_ROLES.map(r => ({
+        name: `${r.name} — ${r.price.toLocaleString()} pts`,
+        value: r.id === 'role_gold' ? 'Entry tier gold member role' : r.id === 'role_platinum' ? 'Mid tier platinum member role' : 'Top tier elite member role',
+        inline: true,
+      }))
+    );
+
+  // XP Boosts embed
+  const badgesEmbed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('🏅 XP Boost Badges (Slot 2)')
+    .setDescription('Purchase a badge that boosts all XP you earn. Equip in **Slot 2**.\n\u200b')
+    .addFields(
+      ...BUYABLE_BADGES.map(b => ({
+        name: `${b.name} — ${b.price.toLocaleString()} pts`,
+        value: b.description,
+        inline: true,
+      }))
+    );
+
+  // Row 1: utility — secondary (grey/white look)
   const utilRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('shop_check_balance').setLabel('💰 Check My Balance').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('shop_slot1').setLabel('🎖️ Equip Earned Badge').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('shop_slot2').setLabel('🏅 Equip Bought Badge').setStyle(ButtonStyle.Primary),
-  );
-  const roleRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('shop_buy_role_gold').setLabel('🌟 Elevate Gold — 2,000 pts').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('shop_buy_role_platinum').setLabel('💠 Elevate Platinum — 5,000 pts').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('shop_buy_role_elite').setLabel('👑 Elevate Elite — 10,000 pts').setStyle(ButtonStyle.Primary),
-  );
-  const badgeRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('shop_buy_badge_rising').setLabel('🌱 Rising Star — 1,000 pts').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('shop_buy_badge_grinder').setLabel('⚡ Grinder — 5,000 pts').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('shop_buy_badge_veteran').setLabel('🌟 Veteran — 10,000 pts').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('shop_slot1').setLabel('🎖️ Equip Earned Badge').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('shop_slot2').setLabel('🏅 Equip Bought Badge').setStyle(ButtonStyle.Secondary),
   );
 
-  const msg = await channel.send({ embeds: [embed], components: [utilRow, roleRow, badgeRow] });
+  // Row 2: role buy buttons — blue
+  const roleRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('shop_buy_role_gold').setLabel('🌟 Gold — 2,000 pts').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('shop_buy_role_platinum').setLabel('💠 Platinum — 5,000 pts').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('shop_buy_role_elite').setLabel('👑 Elite — 10,000 pts').setStyle(ButtonStyle.Primary),
+  );
+
+  // Row 3: badge buy buttons — secondary (white)
+  const badgeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('shop_buy_badge_rising').setLabel('🌱 Rising Star — 1,000 pts').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('shop_buy_badge_grinder').setLabel('⚡ Grinder — 5,000 pts').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('shop_buy_badge_veteran').setLabel('🌟 Veteran — 10,000 pts').setStyle(ButtonStyle.Secondary),
+  );
+
+  const msg = await channel.send({ embeds: [mainEmbed, rolesEmbed, badgesEmbed], components: [utilRow, roleRow, badgeRow] });
   await msg.pin().catch(() => {});
   const db = loadDB(); db.shopMessageId = msg.id; saveDB(db);
   return msg;

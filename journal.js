@@ -100,7 +100,7 @@ async function sendJournalPanel(forumChannel) {
 
   const thread = await forumChannel.threads.create({
     name: '📝 Log a Trade — Click Here',
-    message: { embeds: [achEmbed, logEmbed], components: [row] },
+    message: { embeds: [logEmbed, achEmbed], components: [row] },
     reason: 'Journal panel',
   });
 

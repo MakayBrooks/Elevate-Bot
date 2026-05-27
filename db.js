@@ -5,24 +5,27 @@ const https = require('https');
 const LOCAL_PATH = path.join(__dirname, 'data', 'db.json');
 const GIST_FILENAME = 'elevate-bot-db.json';
 
+function ensureDir() {
+  try { fs.mkdirSync(path.dirname(LOCAL_PATH), { recursive: true }); } catch {}
+}
+
 function localLoad() {
   try {
+    ensureDir();
     if (!fs.existsSync(LOCAL_PATH)) {
-      fs.mkdirSync(path.dirname(LOCAL_PATH), { recursive: true });
-      fs.writeFileSync(LOCAL_PATH, JSON.stringify({ levels: {}, journal: {} }));
+      fs.writeFileSync(LOCAL_PATH, JSON.stringify({ levels: { users: {} }, journal: {} }));
     }
     const data = JSON.parse(fs.readFileSync(LOCAL_PATH, 'utf8'));
-    if (!data.levels) data.levels = {};
+    if (!data.levels) data.levels = { users: {} };
+    if (!data.levels.users) data.levels.users = {};
     if (!data.journal) data.journal = {};
     return data;
-  } catch { return { levels: {}, journal: {} }; }
+  } catch { return { levels: { users: {} }, journal: {} }; }
 }
 
 function localSave(data) {
-  try {
-    fs.mkdirSync(path.dirname(LOCAL_PATH), { recursive: true });
-    fs.writeFileSync(LOCAL_PATH, JSON.stringify(data, null, 2));
-  } catch (e) { console.error('Local save error:', e); }
+  try { ensureDir(); fs.writeFileSync(LOCAL_PATH, JSON.stringify(data, null, 2)); }
+  catch (e) { console.error('Local save error:', e); }
 }
 
 function gistRequest(method, body = null) {
@@ -55,34 +58,53 @@ function gistRequest(method, body = null) {
 
 let _store = null;
 let _dirty = false;
+let _loaded = false;
 
 async function loadAll() {
-  if (_store) return _store;
+  // Always reload from Gist on startup — never skip
   if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
     try {
+      console.log('🔄 Loading DB from Gist...');
       const gist = await gistRequest('GET');
       const content = gist?.files?.[GIST_FILENAME]?.content;
       if (content) {
         const parsed = JSON.parse(content);
         if (parsed && typeof parsed === 'object') {
+          if (!parsed.levels) parsed.levels = { users: {} };
+          if (!parsed.levels.users) parsed.levels.users = {};
+          if (!parsed.journal) parsed.journal = {};
           _store = parsed;
-          if (!_store.levels) _store.levels = {};
-          if (!_store.journal) _store.journal = {};
           localSave(_store);
-          console.log('✅ DB loaded from Gist');
+          _loaded = true;
+          console.log(`✅ DB loaded from Gist — ${Object.keys(_store.levels.users || {}).length} users`);
           return _store;
         }
       }
-    } catch (e) { console.warn('⚠️ Gist load failed, using local:', e.message); }
+      console.warn('⚠️ Gist empty or invalid, using local');
+    } catch (e) {
+      console.warn('⚠️ Gist load failed:', e.message);
+    }
   }
+  // Fallback to local
   _store = localLoad();
-  console.log('📁 DB loaded from local file');
+  _loaded = true;
+  console.log(`📁 DB loaded from local — ${Object.keys(_store.levels?.users || {}).length} users`);
   return _store;
 }
 
-function getStore() { return _store || { levels: {}, journal: {} }; }
-function markDirty() { _dirty = true; localSave(_store); }
+function getStore() {
+  if (!_store) {
+    _store = localLoad();
+  }
+  return _store;
+}
 
+function markDirty() {
+  _dirty = true;
+  localSave(_store); // immediate local backup every write
+}
+
+// Flush to Gist every 20 seconds if dirty
 setInterval(async () => {
   if (!_dirty || !_store || !process.env.GIST_ID || !process.env.GITHUB_TOKEN) return;
   try {
@@ -90,11 +112,15 @@ setInterval(async () => {
     _dirty = false;
     console.log('💾 DB saved to Gist');
   } catch (e) { console.warn('⚠️ Gist save failed:', e.message); }
-}, 30000);
+}, 20000);
 
+// Also save on shutdown
 process.on('SIGTERM', async () => {
-  if (_dirty && _store && process.env.GIST_ID && process.env.GITHUB_TOKEN) {
-    try { await gistRequest('PATCH', { files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } } }); } catch {}
+  if (_store && process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+    try {
+      await gistRequest('PATCH', { files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } } });
+      console.log('💾 DB saved to Gist on shutdown');
+    } catch {}
   }
   process.exit(0);
 });
