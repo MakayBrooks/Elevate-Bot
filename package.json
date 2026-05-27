@@ -1,22 +1,14 @@
 {
   "name": "elevate-bot",
   "version": "1.0.0",
-  "description": "Elevate Discord Bot — Welcome cards, trading journal & economic calendar",
+  "description": "Elevate Discord Bot",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
+  "scripts": { "start": "node index.js" },
   "dependencies": {
     "canvas": "^2.11.2",
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "node-cron": "^3.0.3"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "engines": { "node": ">=18.0.0" }
 }

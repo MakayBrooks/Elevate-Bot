@@ -1,9 +1,3 @@
-/**
- * Persistent database using GitHub Gist.
- * Stores levels and journal data in separate keys.
- * Survives Railway redeploys forever.
- */
-
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -36,7 +30,6 @@ function gistRequest(method, body = null) {
     const token = process.env.GITHUB_TOKEN;
     const gistId = process.env.GIST_ID;
     if (!token || !gistId) return reject(new Error('No GIST_ID or GITHUB_TOKEN'));
-
     const bodyStr = body ? JSON.stringify(body) : null;
     const options = {
       hostname: 'api.github.com',
@@ -49,7 +42,6 @@ function gistRequest(method, body = null) {
         ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {}),
       }
     };
-
     const req = https.request(options, (res) => {
       let raw = '';
       res.on('data', chunk => raw += chunk);
@@ -61,20 +53,18 @@ function gistRequest(method, body = null) {
   });
 }
 
-// Single in-memory store with levels and journal namespaced
 let _store = null;
 let _dirty = false;
 
 async function loadAll() {
   if (_store) return _store;
-
   if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
     try {
       const gist = await gistRequest('GET');
       const content = gist?.files?.[GIST_FILENAME]?.content;
       if (content) {
         const parsed = JSON.parse(content);
-        if (parsed.levels || parsed.journal) {
+        if (parsed && typeof parsed === 'object') {
           _store = parsed;
           if (!_store.levels) _store.levels = {};
           if (!_store.journal) _store.journal = {};
@@ -83,43 +73,28 @@ async function loadAll() {
           return _store;
         }
       }
-    } catch (e) {
-      console.warn('⚠️  Gist load failed, using local:', e.message);
-    }
+    } catch (e) { console.warn('⚠️ Gist load failed, using local:', e.message); }
   }
-
   _store = localLoad();
   console.log('📁 DB loaded from local file');
   return _store;
 }
 
 function getStore() { return _store || { levels: {}, journal: {} }; }
+function markDirty() { _dirty = true; localSave(_store); }
 
-function markDirty() {
-  _dirty = true;
-  localSave(_store); // immediate local backup
-}
-
-// Flush to Gist every 30 seconds
 setInterval(async () => {
-  if (!_dirty || !_store) return;
-  if (!process.env.GIST_ID || !process.env.GITHUB_TOKEN) return;
+  if (!_dirty || !_store || !process.env.GIST_ID || !process.env.GITHUB_TOKEN) return;
   try {
-    await gistRequest('PATCH', {
-      files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } }
-    });
+    await gistRequest('PATCH', { files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } } });
     _dirty = false;
     console.log('💾 DB saved to Gist');
-  } catch (e) { console.warn('⚠️  Gist save failed:', e.message); }
+  } catch (e) { console.warn('⚠️ Gist save failed:', e.message); }
 }, 30000);
 
 process.on('SIGTERM', async () => {
   if (_dirty && _store && process.env.GIST_ID && process.env.GITHUB_TOKEN) {
-    try {
-      await gistRequest('PATCH', {
-        files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } }
-      });
-    } catch {}
+    try { await gistRequest('PATCH', { files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } } }); } catch {}
   }
   process.exit(0);
 });

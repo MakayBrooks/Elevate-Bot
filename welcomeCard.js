@@ -1,7 +1,6 @@
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const path = require('path');
 
-// Register bundled font so it works on ANY server
 registerFont(path.join(__dirname, 'assets', 'font-bold.ttf'), { family: 'ElevateFont' });
 
 async function generateWelcomeCard(member) {
@@ -9,16 +8,12 @@ async function generateWelcomeCard(member) {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  // Background
   ctx.fillStyle = '#0a0a0a';
   ctx.fillRect(0, 0, W, H);
-
-  // Subtle border
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 3;
   ctx.strokeRect(2, 2, W - 4, H - 4);
 
-  // ── Logo top left ──────────────────────────────────────────────────────────
   try {
     const logo = await loadImage(path.join(__dirname, 'assets', 'logo.png'));
     const logoH = 110;
@@ -30,12 +25,10 @@ async function generateWelcomeCard(member) {
     ctx.fillText('ELEVATE', 40, 110);
   }
 
-  // ── "WELCOME TO ELEVATE!" title ────────────────────────────────────────────
   ctx.fillStyle = '#FFFFFF';
   ctx.font = 'bold 62px ElevateFont';
   ctx.fillText('WELCOME TO ELEVATE!', 200, 108);
 
-  // ── Divider ────────────────────────────────────────────────────────────────
   ctx.strokeStyle = 'rgba(255,255,255,0.12)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -43,10 +36,7 @@ async function generateWelcomeCard(member) {
   ctx.lineTo(W - 40, 158);
   ctx.stroke();
 
-  // ── Avatar circle ──────────────────────────────────────────────────────────
   const cx = 220, cy = 360, r = 140;
-
-  // Outer glow ring
   ctx.save();
   ctx.shadowColor = '#FFFFFF';
   ctx.shadowBlur = 30;
@@ -57,14 +47,12 @@ async function generateWelcomeCard(member) {
   ctx.stroke();
   ctx.restore();
 
-  // Inner ring
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Avatar clipped to circle
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -84,9 +72,7 @@ async function generateWelcomeCard(member) {
   }
   ctx.restore();
 
-  // ── Username box ───────────────────────────────────────────────────────────
   const boxX = 430, boxY = 270, boxW = 900, boxH = 140;
-
   ctx.save();
   ctx.shadowColor = '#FFFFFF';
   ctx.shadowBlur = 16;
@@ -94,11 +80,8 @@ async function generateWelcomeCard(member) {
   ctx.lineWidth = 3;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
   ctx.restore();
-
   ctx.fillStyle = 'rgba(255,255,255,0.03)';
   ctx.fillRect(boxX, boxY, boxW, boxH);
-
-  // Username
   ctx.fillStyle = '#FFFFFF';
   ctx.font = 'bold 58px ElevateFont';
   ctx.textAlign = 'center';
