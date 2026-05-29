@@ -29,17 +29,17 @@ const client = new Client({
 const xpCooldowns = new Map();
 
 client.once('ready', async () => {
-  console.log(`✅ Elevate Bot online as ${client.user.tag}`);
+  console.log(`Elevate Bot online as ${client.user.tag}`);
 
   // Load persistent DB first
   await loadAll();
-  console.log('✅ Database loaded.');
+  console.log('Database loaded.');
 
   const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('✅ Slash commands registered.');
-  } catch (err) { console.error('❌ Commands error:', err); }
+    console.log('Slash commands registered.');
+  } catch (err) { console.error('Commands error:', err); }
 
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
 
@@ -50,11 +50,11 @@ client.once('ready', async () => {
       if (journalChannel) {
         const threads = await journalChannel.threads.fetchActive();
         const exists = threads.threads.some(t => t.name === '📝 Log a Trade — Click Here');
-        if (!exists) { await sendJournalPanel(journalChannel); console.log('✅ Journal panel posted.'); }
-        else console.log('📌 Journal panel exists.');
+        if (!exists) { await sendJournalPanel(journalChannel); console.log('Journal panel posted.'); }
+        else console.log('Journal panel exists.');
       }
     }
-  } catch (err) { console.error('❌ Journal panel error:', err); }
+  } catch (err) { console.error('Journal panel error:', err); }
 
   // Leaderboard channel
   try {
@@ -63,12 +63,12 @@ client.once('ready', async () => {
       if (lbChannel) {
         const pinned = await lbChannel.messages.fetchPinned();
         const panelExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '📊 Your Rank');
-        if (!panelExists) { await postLevelsPanel(lbChannel); console.log('✅ Rank panel posted.'); }
-        else console.log('📌 Rank panel exists.');
+        if (!panelExists) { await postLevelsPanel(lbChannel); console.log('Rank panel posted.'); }
+        else console.log('Rank panel exists.');
         await updateLeaderboard(guild);
       }
     }
-  } catch (err) { console.error('❌ Leaderboard error:', err); }
+  } catch (err) { console.error('Leaderboard error:', err); }
 
   // Shop panel
   try {
@@ -77,11 +77,11 @@ client.once('ready', async () => {
       if (shopChannel) {
         const pinned = await shopChannel.messages.fetchPinned();
         const shopExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🛒 Elevate Shop');
-        if (!shopExists) { await postShopPanel(shopChannel); console.log('✅ Shop panel posted.'); }
-        else console.log('🛒 Shop panel exists.');
+        if (!shopExists) { await postShopPanel(shopChannel); console.log('Shop panel posted.'); }
+        else console.log('Shop panel exists.');
       }
     }
-  } catch (err) { console.error('❌ Shop panel error:', err); }
+  } catch (err) { console.error('Shop panel error:', err); }
 
   startPassiveXP(client);
 
@@ -89,7 +89,7 @@ client.once('ready', async () => {
     if (guild) await postWeeklyCalendar(guild, client);
   }, { timezone: 'America/New_York' });
 
-  console.log('📅 Weekly calendar scheduled: Sunday 7PM ET');
+  console.log('Weekly calendar scheduled: Sunday 7PM ET');
 });
 
 // Welcome
@@ -98,10 +98,12 @@ client.on('guildMemberAdd', async (member) => {
     const channel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
     if (!channel) return;
     const joinTimestamp = Math.floor(member.joinedTimestamp / 1000);
-    await channel.send(`🎉 Welcome to the community, ${member}🪽\n👤 We are now **${member.guild.memberCount}** members!\n🕐 Joined: <t:${joinTimestamp}:R>`);
+    await channel.send(`🎉 Welcome to the community, ${member}🪽
+👤 We are now **${member.guild.memberCount}** members!
+🕐 Joined: <t:${joinTimestamp}:R>`);
     const cardBuffer = await generateWelcomeCard(member);
     await channel.send({ files: [new AttachmentBuilder(cardBuffer, { name: 'welcome.png' })] });
-  } catch (err) { console.error('❌ Welcome error:', err); }
+  } catch (err) { console.error('Welcome error:', err); }
 });
 
 // Boost
@@ -134,8 +136,8 @@ client.on('interactionCreate', async (interaction) => {
 
   // Journal
   if (
-    (interaction.isButton() && (interaction.customId.startsWith('journal_'))) ||
-    (interaction.isModalSubmit() && (interaction.customId.startsWith('journal_') || interaction.customId === 'journal_modal_submit')) ||
+    (interaction.isButton() && interaction.customId.startsWith('journal_')) ||
+    (interaction.isModalSubmit() && interaction.customId.startsWith('journal_')) ||
     (interaction.isChatInputCommand() && interaction.commandName === 'journal')
   ) { await handleJournalInteraction(interaction, client); return; }
 
@@ -155,7 +157,7 @@ client.on('interactionCreate', async (interaction) => {
   // /addpoints
   if (interaction.commandName === 'addpoints') {
     await interaction.deferReply({ ephemeral: true });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Admins only.');
     const target = interaction.options.getUser('user');
     const amount = interaction.options.getInteger('amount');
     const db = loadLevelsDB();
@@ -163,7 +165,7 @@ client.on('interactionCreate', async (interaction) => {
     user.points += amount;
     saveLevelsDB(db);
     await updateLeaderboard(guild);
-    await interaction.editReply(`✅ Added **${amount} pts** to ${target.username}. New balance: **${user.points} pts**`);
+    await interaction.editReply(`Added **${amount} pts** to ${target.username}. New balance: **${user.points} pts**`);
   }
 
   // /calendar
