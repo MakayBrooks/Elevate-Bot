@@ -45,7 +45,7 @@ async function getOrCreateForumThread(member, forumChannel, db, userRecord) {
             `📎 **Attach chart screenshots directly after each entry.**`
           )
           .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-          .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+          .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
           .setTimestamp()
       ]
     }
@@ -55,27 +55,23 @@ async function getOrCreateForumThread(member, forumChannel, db, userRecord) {
   return thread;
 }
 
-// -- Journal panel embed (posted in forum channel)
+// -- Journal panel embed
 async function sendJournalPanel(forumChannel) {
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
     .setTitle('📒 Elevate Trading Journal')
     .setDescription(
-      '> Log your trades, unlock achievements, and earn XP.
-' +
-      '> Click **Log a Trade** to submit a trade entry.
-' +
-      '> Click **My Achievements** to see your private progress.
-' +
-      '> Click **Submit Weekly Earnings** for verified leaderboard.
-​'
+      '> Log your trades, unlock achievements, and earn XP.\n' +
+      '> Click **Log a Trade** to submit a trade entry.\n' +
+      '> Click **My Achievements** to see your private progress.\n' +
+      '> Click **Submit Weekly Earnings** for verified leaderboard.\n\u200b'
     )
     .addFields(
       { name: '✨ XP Per Trade', value: '+75 XP for every trade logged', inline: true },
       { name: '🏆 Achievements', value: 'Earn bonus XP for milestones', inline: true },
       { name: '📎 Charts', value: 'Attach screenshots in your thread', inline: true },
     )
-    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
     .setTimestamp();
 
   const achEmbed = buildAchievementsPanel();
@@ -204,7 +200,7 @@ function buildTradeEmbed(member, data, tradeNumber) {
       ...(data.notes ? [{ name: '🧠 Post Trade Clarity', value: data.notes, inline: false }] : []),
       { name: '📎 Charts', value: 'Attach screenshots below ↓', inline: false }
     )
-    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
     .setTimestamp();
 }
 
@@ -294,7 +290,7 @@ async function handleJournalInteraction(interaction, client) {
           { name: '📎 Proof', value: screenshotNote, inline: false },
         )
         .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate 🪽 • Approve or Deny' })
+        .setFooter({ text: 'Elevate 🪹 • Approve or Deny' })
         .setTimestamp();
 
       const row = new ActionRowBuilder().addComponents(
@@ -321,7 +317,7 @@ async function handleJournalInteraction(interaction, client) {
     await checkAchievements(targetId, targetMember?.user.username || 'User', computeStats(db[targetId].trades || [], db[targetId].verifiedWeeks), interaction.guild, addXP);
     await addXP(targetId, targetMember?.user.username || 'User', 200, interaction.guild);
     await interaction.editReply({ content: `✅ Approved! +200 XP awarded to ${targetMember || targetId}.`, components: [] });
-    try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪽'); } catch {}
+    try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪹'); } catch {}
     return;
   }
 
@@ -353,7 +349,7 @@ async function handleJournalInteraction(interaction, client) {
         { name: '✅ Wins', value: `${stats.wins}`, inline: true },
         { name: '💰 Verified Weeks', value: `${stats.verifiedWeeks}`, inline: true },
       )
-      .setFooter({ text: 'Elevate 🪽 • Only you can see this' });
+      .setFooter({ text: 'Elevate 🪹 • Only you can see this' });
     await interaction.editReply({ embeds: [embed] });
   }
 }
