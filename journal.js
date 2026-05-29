@@ -1,7 +1,6 @@
 const {
   EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle,
-  ThreadAutoArchiveDuration
 } = require('discord.js');
 const { getStore, markDirty } = require('./db');
 const { checkAchievements, buildAchievementsPanel, buildMyAchievements, computeStats } = require('./achievements');
@@ -17,52 +16,50 @@ function saveDB(data) {
   markDirty();
 }
 
-// -- Get or create public forum thread
-async function getOrCreateForumThread(member, forumChannel, db, userRecord) {
+// Get or create per-user trade thread in text channel
+async function getOrCreateUserThread(member, channel, db, userRecord) {
   if (userRecord.threadId) {
     try {
-      const existing = await forumChannel.threads.fetch(userRecord.threadId);
+      const existing = await channel.threads.fetch(userRecord.threadId);
       if (existing) {
         if (existing.archived) await existing.setArchived(false);
         return existing;
       }
     } catch {}
   }
-  const thread = await forumChannel.threads.create({
-    name: `📒 ${member.user.username}`,
-    autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-    message: {
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xF5F0E8)
-          .setTitle(`📒 ${member.user.username}'s Trading Journal`)
-          .setDescription(
-            `> Trading journal for **${member.user.username}**.
-
-` +
-            `All trade entries are logged here automatically.
-` +
-            `📎 **Attach chart screenshots directly after each entry.**`
-          )
-          .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-          .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
-          .setTimestamp()
-      ]
-    }
+  const thread = await channel.threads.create({
+    name: `📒 ${member.user.username}'s Trades`,
+    autoArchiveDuration: 10080,
+    reason: `Trade log for ${member.user.username}`,
+  });
+  await thread.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xF5F0E8)
+        .setTitle(`📒 ${member.user.username}'s Trading Journal`)
+        .setDescription(
+          `> Trade log for **${member.user.username}**.\n\n` +
+          `All entries are logged here automatically.\n` +
+          `📎 **Attach chart screenshots directly after each entry.**`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
+        .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+        .setTimestamp()
+    ]
   });
   userRecord.threadId = thread.id;
   saveDB(db);
   return thread;
 }
 
-// -- Journal panel embed
-async function sendJournalPanel(forumChannel) {
+// Journal panel — pinned embed+buttons directly in channel (like shop)
+async function sendJournalPanel(channel) {
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
     .setTitle('📒 Elevate Trading Journal')
     .setDescription(
       '> Log your trades, unlock achievements, and earn XP.\n' +
-      '> Click **Log a Trade** to submit a trade entry.\n' +
+      '> Click **Log a Trade** to submit a new trade entry.\n' +
       '> Click **My Achievements** to see your private progress.\n' +
       '> Click **Submit Weekly Earnings** for verified leaderboard.\n\u200b'
     )
@@ -71,7 +68,7 @@ async function sendJournalPanel(forumChannel) {
       { name: '🏆 Achievements', value: 'Earn bonus XP for milestones', inline: true },
       { name: '📎 Charts', value: 'Attach screenshots in your thread', inline: true },
     )
-    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
     .setTimestamp();
 
   const achEmbed = buildAchievementsPanel();
@@ -82,20 +79,16 @@ async function sendJournalPanel(forumChannel) {
     new ButtonBuilder().setCustomId('journal_submit_earnings').setLabel('💰 Submit Weekly Earnings').setStyle(ButtonStyle.Success),
   );
 
-  const thread = await forumChannel.threads.create({
-    name: '📝 Log a Trade — Click Here',
-    message: { embeds: [logEmbed, achEmbed], components: [row] },
-    reason: 'Journal panel',
-  });
+  const msg = await channel.send({ embeds: [logEmbed, achEmbed], components: [row] });
+  await msg.pin().catch(() => {});
 
   const db = loadDB();
-  db._panelPosted = true;
-  db._panelThreadId = thread.id;
+  db._panelMessageId = msg.id;
   saveDB(db);
-  return thread;
+  return msg;
 }
 
-// -- Trade log modal
+// Trade log modal
 function buildTradeModal() {
   return new ModalBuilder()
     .setCustomId('journal_modal_submit')
@@ -144,7 +137,7 @@ function buildTradeModal() {
     );
 }
 
-// -- Weekly earnings modal
+// Weekly earnings modal
 function buildEarningsModal() {
   return new ModalBuilder()
     .setCustomId('journal_earnings_modal')
@@ -169,7 +162,7 @@ function buildEarningsModal() {
     );
 }
 
-// -- Trade embed
+// Trade embed
 function buildTradeEmbed(member, data, tradeNumber) {
   const outcome = (data.outcome || '').trim().toLowerCase();
   const position = (data.position || '').trim().toLowerCase();
@@ -179,7 +172,7 @@ function buildTradeEmbed(member, data, tradeNumber) {
   const posLabel = position.startsWith('l') ? 'Long' : 'Short';
   const color = outcome.startsWith('w') ? 0x00c853 : outcome.startsWith('l') ? 0xff1744 : 0xaaaaaa;
   const sessionMap = { london: '🇬🇧', newyork: '🇺🇸', ny: '🇺🇸', asia: '🌏' };
-  const sessionKey = (data.session || '').trim().toLowerCase().replace(/s/g, '');
+  const sessionKey = (data.session || '').trim().toLowerCase().replace(/\s/g, '');
   const sessionEmoji = sessionMap[sessionKey] || '🌐';
   const confluenceTags = data.confluences
     ? data.confluences.split(',').map(t => `\`${t.trim()}\``).join(' ')
@@ -200,13 +193,13 @@ function buildTradeEmbed(member, data, tradeNumber) {
       ...(data.notes ? [{ name: '🧠 Post Trade Clarity', value: data.notes, inline: false }] : []),
       { name: '📎 Charts', value: 'Attach screenshots below ↓', inline: false }
     )
-    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
     .setTimestamp();
 }
 
-// -- Handle all journal interactions
+// Handle all journal interactions
 async function handleJournalInteraction(interaction, client) {
-  const forumChannel = interaction.guild.channels.cache.get(process.env.JOURNAL_CHANNEL_ID);
+  const journalChannel = interaction.guild.channels.cache.get(process.env.JOURNAL_CHANNEL_ID);
   const { addXP } = require('./levels');
 
   if (interaction.isButton() && interaction.customId === 'journal_log_trade') {
@@ -255,10 +248,10 @@ async function handleJournalInteraction(interaction, client) {
       userRecord.trades.push(data);
       saveDB(db);
 
-      if (!forumChannel) return interaction.editReply('⚠️ Journal channel not found. Ask admin to check JOURNAL_CHANNEL_ID.');
+      if (!journalChannel) return interaction.editReply('⚠️ Journal channel not found.');
 
       const member = await interaction.guild.members.fetch(interaction.user.id);
-      const thread = await getOrCreateForumThread(member, forumChannel, db, userRecord);
+      const thread = await getOrCreateUserThread(member, journalChannel, db, userRecord);
       await thread.send({ embeds: [buildTradeEmbed(member, data, userRecord.trades.length)] });
 
       await addXP(interaction.user.id, interaction.user.username, 75, interaction.guild);
@@ -277,7 +270,6 @@ async function handleJournalInteraction(interaction, client) {
     await interaction.deferReply({ ephemeral: true });
     const weeklyPnl = interaction.fields.getTextInputValue('weekly_pnl');
     const screenshotNote = interaction.fields.getTextInputValue('screenshot_note');
-
     const adminChannel = interaction.guild.channels.cache.get(process.env.ADMIN_CHANNEL_ID);
     if (adminChannel) {
       const embed = new EmbedBuilder()
@@ -290,16 +282,15 @@ async function handleJournalInteraction(interaction, client) {
           { name: '📎 Proof', value: screenshotNote, inline: false },
         )
         .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate 🪹 • Approve or Deny' })
+        .setFooter({ text: 'Elevate 🪽 • Approve or Deny' })
         .setTimestamp();
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`journal_earnings_approve_${interaction.user.id}`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`journal_earnings_deny_${interaction.user.id}`).setLabel('❌ Deny').setStyle(ButtonStyle.Danger),
       );
       await adminChannel.send({ embeds: [embed], components: [row] });
     }
-    await interaction.editReply('✅ Submitted for admin review! You will be notified once approved.');
+    await interaction.editReply('✅ Submitted for admin review! You\'ll be notified once approved.');
     return;
   }
 
@@ -317,7 +308,7 @@ async function handleJournalInteraction(interaction, client) {
     await checkAchievements(targetId, targetMember?.user.username || 'User', computeStats(db[targetId].trades || [], db[targetId].verifiedWeeks), interaction.guild, addXP);
     await addXP(targetId, targetMember?.user.username || 'User', 200, interaction.guild);
     await interaction.editReply({ content: `✅ Approved! +200 XP awarded to ${targetMember || targetId}.`, components: [] });
-    try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪹'); } catch {}
+    try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪽'); } catch {}
     return;
   }
 
@@ -349,7 +340,7 @@ async function handleJournalInteraction(interaction, client) {
         { name: '✅ Wins', value: `${stats.wins}`, inline: true },
         { name: '💰 Verified Weeks', value: `${stats.verifiedWeeks}`, inline: true },
       )
-      .setFooter({ text: 'Elevate 🪹 • Only you can see this' });
+      .setFooter({ text: 'Elevate 🪽 • Only you can see this' });
     await interaction.editReply({ embeds: [embed] });
   }
 }
