@@ -138,6 +138,7 @@ client.on('interactionCreate', async (interaction) => {
     if (
       (interaction.isButton() && interaction.customId.startsWith('journal_')) ||
       (interaction.isModalSubmit() && interaction.customId.startsWith('journal_')) ||
+      (interaction.isStringSelectMenu() && interaction.customId.startsWith('journal_')) ||
       (interaction.isChatInputCommand() && interaction.commandName === 'journal')
     ) { await handleJournalInteraction(interaction, client); return; }
 
