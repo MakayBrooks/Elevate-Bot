@@ -489,8 +489,7 @@ function buildJournalPageEmbed(trades, page, username) {
     const m = (t.pnl||'').replace(/,/g,'').match(/([+-]?\d+(?:\.\d+)?)/);
     return sum + (m ? parseFloat(m[1]) : 0);
   }, 0);
-  const pnlStr = (totalPnl >= 0 ? '+' : '') + '
- + totalPnl.toFixed(2);
+  const pnlStr = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
 
   // Trade lines
   const tradeLines = slice.map((t, i) => {
