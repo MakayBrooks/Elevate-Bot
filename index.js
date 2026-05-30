@@ -42,7 +42,7 @@ client.once('ready', async () => {
 
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
 
-  // Journal panel — pinned embed in text channel (like shop)
+  // Journal panel
   try {
     if (guild) {
       const journalChannel = guild.channels.cache.get(process.env.JOURNAL_CHANNEL_ID);
@@ -97,7 +97,9 @@ client.on('guildMemberAdd', async (member) => {
     const channel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
     if (!channel) return;
     const joinTimestamp = Math.floor(member.joinedTimestamp / 1000);
-    await channel.send(`🎉 Welcome to the community, ${member}🪽\n👤 We are now **${member.guild.memberCount}** members!\n🕐 Joined: <t:${joinTimestamp}:R>`);
+    await channel.send(`🎉 Welcome to the community, ${member}🪽
+👤 We are now **${member.guild.memberCount}** members!
+🕐 Joined: <t:${joinTimestamp}:R>`);
     const cardBuffer = await generateWelcomeCard(member);
     await channel.send({ files: [new AttachmentBuilder(cardBuffer, { name: 'welcome.png' })] });
   } catch (err) { console.error('❌ Welcome error:', err); }
@@ -129,47 +131,58 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
 // Interactions
 client.on('interactionCreate', async (interaction) => {
-  const guild = interaction.guild;
+  try {
+    const guild = interaction.guild;
 
-  // Journal
-  if (
-    (interaction.isButton() && interaction.customId.startsWith('journal_')) ||
-    (interaction.isModalSubmit() && interaction.customId.startsWith('journal_')) ||
-    (interaction.isChatInputCommand() && interaction.commandName === 'journal')
-  ) { await handleJournalInteraction(interaction, client); return; }
+    // Journal
+    if (
+      (interaction.isButton() && interaction.customId.startsWith('journal_')) ||
+      (interaction.isModalSubmit() && interaction.customId.startsWith('journal_')) ||
+      (interaction.isChatInputCommand() && interaction.commandName === 'journal')
+    ) { await handleJournalInteraction(interaction, client); return; }
 
-  // Rank button
-  if (interaction.isButton() && interaction.customId === 'levels_check_rank') { await handleCheckRank(interaction, guild); return; }
+    // Rank button
+    if (interaction.isButton() && interaction.customId === 'levels_check_rank') { await handleCheckRank(interaction, guild); return; }
 
-  // Shop buttons
-  if (interaction.isButton() && interaction.customId === 'shop_check_balance') { await handleCheckBalance(interaction); return; }
-  if (interaction.isButton() && interaction.customId === 'shop_slot1') { await handleSlot1(interaction); return; }
-  if (interaction.isButton() && interaction.customId === 'shop_slot2') { await handleSlot2(interaction); return; }
-  if (interaction.isStringSelectMenu() && interaction.customId === 'shop_equip_earned') { await handleEquipSelect(interaction); return; }
-  if (interaction.isStringSelectMenu() && interaction.customId === 'shop_equip_bought') { await handleEquipSelect(interaction); return; }
-  if (interaction.isButton() && interaction.customId.startsWith('shop_buy_')) { await handleShopBuy(interaction, guild); return; }
+    // Shop buttons
+    if (interaction.isButton() && interaction.customId === 'shop_check_balance') { await handleCheckBalance(interaction); return; }
+    if (interaction.isButton() && interaction.customId === 'shop_slot1') { await handleSlot1(interaction); return; }
+    if (interaction.isButton() && interaction.customId === 'shop_slot2') { await handleSlot2(interaction); return; }
+    if (interaction.isStringSelectMenu() && interaction.customId === 'shop_equip_earned') { await handleEquipSelect(interaction); return; }
+    if (interaction.isStringSelectMenu() && interaction.customId === 'shop_equip_bought') { await handleEquipSelect(interaction); return; }
+    if (interaction.isButton() && interaction.customId.startsWith('shop_buy_')) { await handleShopBuy(interaction, guild); return; }
 
-  if (!interaction.isChatInputCommand()) return;
+    if (!interaction.isChatInputCommand()) return;
 
-  // /addpoints
-  if (interaction.commandName === 'addpoints') {
-    await interaction.deferReply({ ephemeral: true });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
-    const target = interaction.options.getUser('user');
-    const amount = interaction.options.getInteger('amount');
-    const db = loadLevelsDB();
-    const user = getUser(db, target.id, target.username);
-    user.points += amount;
-    saveLevelsDB(db);
-    await updateLeaderboard(guild);
-    await interaction.editReply(`✅ Added **${amount} pts** to ${target.username}. New balance: **${user.points} pts**`);
-  }
+    // /addpoints
+    if (interaction.commandName === 'addpoints') {
+      await interaction.deferReply({ ephemeral: true });
+      if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+      const target = interaction.options.getUser('user');
+      const amount = interaction.options.getInteger('amount');
+      const db = loadLevelsDB();
+      const user = getUser(db, target.id, target.username);
+      user.points += amount;
+      saveLevelsDB(db);
+      await updateLeaderboard(guild);
+      await interaction.editReply(`✅ Added **${amount} pts** to ${target.username}. New balance: **${user.points} pts**`);
+    }
 
-  // /calendar
-  if (interaction.commandName === 'calendar') {
-    await interaction.deferReply({ ephemeral: true });
-    if (guild) await postWeeklyCalendar(guild, client);
-    await interaction.editReply('📅 Calendar posted!');
+    // /calendar
+    if (interaction.commandName === 'calendar') {
+      await interaction.deferReply({ ephemeral: true });
+      if (guild) await postWeeklyCalendar(guild, client);
+      await interaction.editReply('📅 Calendar posted!');
+    }
+  } catch (err) {
+    console.error('Unhandled interaction error:', err);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: '❌ Something went wrong. Please try again.' });
+      } else {
+        await interaction.reply({ content: '❌ Something went wrong. Please try again.', ephemeral: true });
+      }
+    } catch {}
   }
 });
 
