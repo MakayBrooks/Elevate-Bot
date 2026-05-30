@@ -1,6 +1,7 @@
 const {
   EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder,
-  ModalBuilder, TextInputBuilder, TextInputStyle,
+  ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder,
+  MessageFlags,
 } = require('discord.js');
 const { getStore, markDirty } = require('./db');
 const { checkAchievements, buildAchievementsPanel, buildMyAchievements, computeStats } = require('./achievements');
@@ -28,7 +29,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
     } catch {}
   }
   const thread = await channel.threads.create({
-    name: `📒 ${member.user.username}'s Trades`,
+    name: `📚 ${member.user.username}'s Trades`,
     autoArchiveDuration: 10080,
     reason: `Trade log for ${member.user.username}`,
   });
@@ -36,7 +37,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
     embeds: [
       new EmbedBuilder()
         .setColor(0xF5F0E8)
-        .setTitle(`📒 ${member.user.username}'s Trading Journal`)
+        .setTitle(`📚 ${member.user.username}'s Trading Journal`)
         .setDescription(
           `> Trade log for **${member.user.username}**.
 
@@ -46,7 +47,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
           `📎 **Attach chart screenshots directly after each entry.**`
         )
         .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
+        .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
         .setTimestamp()
     ]
   });
@@ -59,7 +60,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
 async function sendJournalPanel(channel) {
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
-    .setTitle('📒 Elevate Trading Journal')
+    .setTitle('📚 Elevate Trading Journal')
     .setDescription(
       '> Log your trades, unlock achievements, and earn XP.\n' +
       '> Click **Log a Trade** to submit a new trade entry.\n' +
@@ -71,7 +72,7 @@ async function sendJournalPanel(channel) {
       { name: '🏆 Achievements', value: 'Earn bonus XP for milestones', inline: true },
       { name: '📎 Charts', value: 'Attach screenshots in your thread', inline: true },
     )
-    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
     .setTimestamp();
 
   const achEmbed = buildAchievementsPanel();
@@ -80,6 +81,7 @@ async function sendJournalPanel(channel) {
     new ButtonBuilder().setCustomId('journal_log_trade').setLabel('📝 Log a Trade').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('journal_check_achievements').setLabel('🏆 My Achievements').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('journal_submit_earnings').setLabel('💰 Submit Weekly Earnings').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('journal_my_journal').setLabel('📚 My Journal').setStyle(ButtonStyle.Secondary),
   );
 
   const msg = await channel.send({ embeds: [logEmbed, achEmbed], components: [row] });
@@ -196,7 +198,7 @@ function buildTradeEmbed(member, data, tradeNumber) {
       ...(data.notes ? [{ name: '🧠 Post Trade Clarity', value: data.notes, inline: false }] : []),
       { name: '📎 Charts', value: 'Attach screenshots below ↓', inline: false }
     )
-    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
     .setTimestamp();
 }
 
@@ -204,6 +206,71 @@ function buildTradeEmbed(member, data, tradeNumber) {
 async function handleJournalInteraction(interaction, client) {
   const journalChannel = interaction.guild.channels.cache.get(process.env.JOURNAL_CHANNEL_ID);
   const { addXP } = require('./levels');
+
+
+  // ── My Journal button ─────────────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId === 'journal_my_journal') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const payload = await handleMyJournal(interaction, 0);
+      await interaction.editReply(payload);
+    } catch (err) {
+      if (err.code === 10062 || (err.rawError?.message?.includes('already been acknowledged'))) return;
+      console.error('My Journal error:', err);
+      await interaction.editReply('❌ Error loading journal. Please try again.').catch(() => {});
+    }
+    return;
+  }
+
+  // ── Pagination buttons ────────────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('journal_page_')) {
+    await interaction.deferUpdate();
+    try {
+      const parts = interaction.customId.split('_'); // journal_page_X_USERID
+      const page = parseInt(parts[2], 10);
+      const payload = await handleMyJournal(interaction, page);
+      await interaction.editReply(payload);
+    } catch (err) {
+      if (err.code === 10062 || (err.rawError?.message?.includes('already been acknowledged'))) return;
+      console.error('Journal pagination error:', err);
+    }
+    return;
+  }
+
+  // ── Close button ──────────────────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId === 'journal_close') {
+    try {
+      await interaction.update({ content: '✅ Journal closed.', embeds: [], components: [] });
+    } catch (err) {
+      if (err.code === 10062 || (err.rawError?.message?.includes('already been acknowledged'))) return;
+    }
+    return;
+  }
+
+  // ── Trade detail select menu ──────────────────────────────────────────────
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('journal_trade_select_')) {
+    await interaction.deferUpdate();
+    try {
+      const tradeIdx = parseInt(interaction.values[0], 10);
+      const db = loadDB();
+      const userData = db[interaction.user.id];
+      if (!userData?.trades?.[tradeIdx]) {
+        await interaction.followUp({ content: '❌ Trade not found.', ephemeral: true });
+        return;
+      }
+      const trade = userData.trades[tradeIdx];
+      let member;
+      try { member = await interaction.guild.members.fetch(interaction.user.id); } catch { member = null; }
+      await interaction.followUp({
+        embeds: [buildTradeDetailEmbed(trade, tradeIdx, interaction.user)],
+        ephemeral: true,
+      });
+    } catch (err) {
+      if (err.code === 10062 || (err.rawError?.message?.includes('already been acknowledged'))) return;
+      console.error('Trade detail error:', err);
+    }
+    return;
+  }
 
   if (interaction.isButton() && interaction.customId === 'journal_log_trade') {
     try {
@@ -309,7 +376,7 @@ async function handleJournalInteraction(interaction, client) {
             { name: '📎 Proof', value: screenshotNote, inline: false },
           )
           .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png' }))
-          .setFooter({ text: 'Elevate 🪹 • Approve or Deny' })
+          .setFooter({ text: 'Elevate 🪽 • Approve or Deny' })
           .setTimestamp();
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`journal_earnings_approve_${interaction.user.id}`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
@@ -341,7 +408,7 @@ async function handleJournalInteraction(interaction, client) {
       await checkAchievements(targetId, targetMember?.user.username || 'User', computeStats(db[targetId].trades || [], db[targetId].verifiedWeeks), interaction.guild, addXP);
       await addXP(targetId, targetMember?.user.username || 'User', 200, interaction.guild);
       await interaction.editReply({ content: `✅ Approved! +200 XP awarded to ${targetMember || targetId}.`, components: [] });
-      try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪹'); } catch {}
+      try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪽'); } catch {}
     } catch (err) {
       if (err.code === 10062 || (err.rawError && err.rawError.message && err.rawError.message.includes('already been acknowledged'))) return;
       console.error('Approve earnings error:', err);
@@ -385,7 +452,7 @@ async function handleJournalInteraction(interaction, client) {
           { name: '✅ Wins', value: `${stats.wins}`, inline: true },
           { name: '💰 Verified Weeks', value: `${stats.verifiedWeeks}`, inline: true },
         )
-        .setFooter({ text: 'Elevate 🪹 • Only you can see this' });
+        .setFooter({ text: 'Elevate 🪽 • Only you can see this' });
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
       if (err.code === 10062 || (err.rawError && err.rawError.message && err.rawError.message.includes('already been acknowledged'))) return;
@@ -393,6 +460,163 @@ async function handleJournalInteraction(interaction, client) {
       await interaction.editReply('❌ Error loading stats. Please try again.').catch(() => {});
     }
   }
+}
+
+
+// ── My Journal ──────────────────────────────────────────────────────────────
+
+const TRADES_PER_PAGE = 5;
+
+function buildJournalPageEmbed(trades, page, username) {
+  const totalPages = Math.max(1, Math.ceil(trades.length / TRADES_PER_PAGE));
+  const start = page * TRADES_PER_PAGE;
+  const slice = trades.slice(start, start + TRADES_PER_PAGE);
+
+  // Stats
+  const wins = trades.filter(t => (t.outcome||'').trim().toLowerCase().startsWith('w')).length;
+  const losses = trades.filter(t => (t.outcome||'').trim().toLowerCase().startsWith('l')).length;
+  const winRate = trades.length > 0 ? ((wins / trades.length) * 100).toFixed(1) : '0.0';
+
+  // Average R:R
+  const rrValues = trades.map(t => {
+    const m = (t.rr||'').match(/(d+(?:.d+)?)s*:s*(d+(?:.d+)?)/);
+    return m ? parseFloat(m[2]) / parseFloat(m[1]) : null;
+  }).filter(v => v !== null);
+  const avgRR = rrValues.length > 0 ? (rrValues.reduce((a,b) => a+b, 0) / rrValues.length).toFixed(2) : 'N/A';
+
+  // Total PnL (sum of numeric values)
+  const totalPnl = trades.reduce((sum, t) => {
+    const m = (t.pnl||'').replace(/,/g,'').match(/([+-]?d+(?:.d+)?)/);
+    return sum + (m ? parseFloat(m[1]) : 0);
+  }, 0);
+  const pnlStr = (totalPnl >= 0 ? '+' : '') + '
+ + totalPnl.toFixed(2);
+
+  // Trade lines
+  const tradeLines = slice.map((t, i) => {
+    const globalIdx = start + i;
+    const outcome = (t.outcome||'').trim().toLowerCase();
+    const emoji = outcome.startsWith('w') ? '🟢' : outcome.startsWith('l') ? '🔴' : '🟡';
+    const pair = (t.pair||'N/A').toUpperCase();
+    const outcomeLabel = outcome.startsWith('w') ? 'Win' : outcome.startsWith('l') ? 'Loss' : 'Breakeven';
+    return `${emoji} **#${globalIdx+1}** ${pair} | ${outcomeLabel} | ${t.pnl||'N/A'} | ${t.datetime||'N/A'}`;
+  }).join('\n') || 'No trades on this page.';
+
+  return new EmbedBuilder()
+    .setColor(0xF5F0E8)
+    .setTitle('📚 Your Trading Journal')
+    .addFields(
+      { name: '📋 Total Trades', value: `${trades.length}`, inline: true },
+      { name: '🏆 Win Rate', value: `${winRate}%`, inline: true },
+      { name: '⚖️ Avg R:R', value: `1:${avgRR}`, inline: true },
+      { name: '💰 Total PnL', value: pnlStr, inline: true },
+      { name: '✅ Wins', value: `${wins}`, inline: true },
+      { name: '❌ Losses', value: `${losses}`, inline: true },
+      { name: `📅 Recent Trades — Page ${page+1} of ${totalPages}`, value: tradeLines, inline: false },
+    )
+    .setFooter({ text: `Elevate 🪽 • Only you can see this • Page ${page+1}/${totalPages}` })
+    .setTimestamp();
+}
+
+function buildJournalComponents(trades, page, userId) {
+  const totalPages = Math.max(1, Math.ceil(trades.length / TRADES_PER_PAGE));
+  const start = page * TRADES_PER_PAGE;
+  const slice = trades.slice(start, start + TRADES_PER_PAGE);
+
+  const navRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`journal_page_${page-1}_${userId}`)
+      .setLabel('⬅️ Previous')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page <= 0),
+    new ButtonBuilder()
+      .setCustomId(`journal_page_${page+1}_${userId}`)
+      .setLabel('➡️ Next')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= totalPages - 1),
+    new ButtonBuilder()
+      .setCustomId('journal_close')
+      .setLabel('❌ Close')
+      .setStyle(ButtonStyle.Danger),
+  );
+
+  const components = [navRow];
+
+  if (slice.length > 0) {
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`journal_trade_select_${userId}`)
+      .setPlaceholder('🔍 View trade details...')
+      .addOptions(slice.map((t, i) => {
+        const globalIdx = start + i;
+        const outcome = (t.outcome||'').trim().toLowerCase();
+        const emoji = outcome.startsWith('w') ? '🟢' : outcome.startsWith('l') ? '🔴' : '🟡';
+        return {
+          label: `#${globalIdx+1} ${(t.pair||'N/A').toUpperCase()} — ${t.datetime||'N/A'}`,
+          description: `${outcome.startsWith('w')?'Win':outcome.startsWith('l')?'Loss':'Breakeven'} | ${t.pnl||'N/A'}`,
+          value: `${globalIdx}`,
+          emoji: emoji,
+        };
+      }));
+    components.push(new ActionRowBuilder().addComponents(selectMenu));
+  }
+
+  return components;
+}
+
+function buildTradeDetailEmbed(trade, tradeIdx, user) {
+  const outcome = (trade.outcome||'').trim().toLowerCase();
+  const position = (trade.position||'').trim().toLowerCase();
+  const outcomeEmoji = outcome.startsWith('w') ? '✅' : outcome.startsWith('l') ? '❌' : '➖';
+  const outcomeLabel = outcome.startsWith('w') ? 'Win' : outcome.startsWith('l') ? 'Loss' : 'Breakeven';
+  const posEmoji = position.startsWith('l') ? '📈' : '📉';
+  const posLabel = position.startsWith('l') ? 'Long' : 'Short';
+  const color = outcome.startsWith('w') ? 0x00c853 : outcome.startsWith('l') ? 0xff1744 : 0xaaaaaa;
+  const confluenceTags = trade.confluences
+    ? trade.confluences.split(',').map(t => `\`${t.trim()}\``).join(' ')
+    : '`None`';
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`${outcomeEmoji} Trade #${tradeIdx+1} — ${(trade.pair||'N/A').toUpperCase()}`)
+    .addFields(
+      { name: '📅 Date', value: trade.datetime || 'N/A', inline: true },
+      { name: '🌐 Session', value: trade.session || 'N/A', inline: true },
+      { name: `${posEmoji} Position`, value: posLabel, inline: true },
+      { name: '⚖️ R:R', value: `\`${trade.rr||'N/A'}\``, inline: true },
+      { name: `${outcomeEmoji} Outcome`, value: outcomeLabel, inline: true },
+      { name: '💰 PnL', value: `**${trade.pnl||'N/A'}**`, inline: true },
+      { name: '🔗 Confluences', value: confluenceTags, inline: false },
+      ...(trade.notes ? [{ name: '🧠 Post Trade Clarity', value: trade.notes, inline: false }] : []),
+    )
+    .setFooter({ text: `Elevate 🪽 • Trade Detail` })
+    .setTimestamp();
+
+  if (trade.screenshot) embed.setImage(trade.screenshot);
+  return embed;
+}
+
+async function handleMyJournal(interaction, page = 0) {
+  const db = loadDB();
+  const userData = db[interaction.user.id];
+
+  if (!userData?.trades?.length) {
+    const empty = new EmbedBuilder()
+      .setColor(0xF5F0E8)
+      .setTitle('📚 Your Trading Journal')
+      .setDescription('No trades logged yet. Click **📝 Log a Trade** to get started!')
+      .setFooter({ text: 'Elevate 🪽 • Only you can see this' });
+    return { embeds: [empty], components: [], flags: MessageFlags.Ephemeral };
+  }
+
+  const trades = userData.trades;
+  const totalPages = Math.max(1, Math.ceil(trades.length / TRADES_PER_PAGE));
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+
+  return {
+    embeds: [buildJournalPageEmbed(trades, safePage, interaction.user.username)],
+    components: buildJournalComponents(trades, safePage, interaction.user.id),
+    flags: MessageFlags.Ephemeral,
+  };
 }
 
 module.exports = { handleJournalInteraction, sendJournalPanel, loadDB };
