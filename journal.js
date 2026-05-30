@@ -108,7 +108,7 @@ function buildTradeModal() {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('position_rr_outcome')
-          .setLabel('Position | R:R | Outcome (e.g. Long | 1:2 | Win)')
+          .setLabel('Position | R:R | Outcome (Long | 1:2 | Win)')
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
           .setPlaceholder('Long | 1:2 | Win')
