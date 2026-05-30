@@ -38,12 +38,15 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
         .setColor(0xF5F0E8)
         .setTitle(`📒 ${member.user.username}'s Trading Journal`)
         .setDescription(
-          `> Trade log for **${member.user.username}**.\n\n` +
-          `All entries are logged here automatically.\n` +
+          `> Trade log for **${member.user.username}**.
+
+` +
+          `All entries are logged here automatically.
+` +
           `📎 **Attach chart screenshots directly after each entry.**`
         )
         .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+        .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
         .setTimestamp()
     ]
   });
@@ -52,23 +55,27 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
   return thread;
 }
 
-// Journal panel — pinned embed+buttons directly in channel (like shop)
+// Journal panel
 async function sendJournalPanel(channel) {
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
     .setTitle('📒 Elevate Trading Journal')
     .setDescription(
-      '> Log your trades, unlock achievements, and earn XP.\n' +
-      '> Click **Log a Trade** to submit a new trade entry.\n' +
-      '> Click **My Achievements** to see your private progress.\n' +
-      '> Click **Submit Weekly Earnings** for verified leaderboard.\n\u200b'
+      '> Log your trades, unlock achievements, and earn XP.
+' +
+      '> Click **Log a Trade** to submit a new trade entry.
+' +
+      '> Click **My Achievements** to see your private progress.
+' +
+      '> Click **Submit Weekly Earnings** for verified leaderboard.
+​'
     )
     .addFields(
       { name: '✨ XP Per Trade', value: '+75 XP for every trade logged', inline: true },
       { name: '🏆 Achievements', value: 'Earn bonus XP for milestones', inline: true },
       { name: '📎 Charts', value: 'Attach screenshots in your thread', inline: true },
     )
-    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
     .setTimestamp();
 
   const achEmbed = buildAchievementsPanel();
@@ -193,7 +200,7 @@ function buildTradeEmbed(member, data, tradeNumber) {
       ...(data.notes ? [{ name: '🧠 Post Trade Clarity', value: data.notes, inline: false }] : []),
       { name: '📎 Charts', value: 'Attach screenshots below ↓', inline: false }
     )
-    .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
+    .setFooter({ text: 'Elevate 🪹 • Trading Journal' })
     .setTimestamp();
 }
 
@@ -203,18 +210,37 @@ async function handleJournalInteraction(interaction, client) {
   const { addXP } = require('./levels');
 
   if (interaction.isButton() && interaction.customId === 'journal_log_trade') {
-    await interaction.showModal(buildTradeModal());
+    try {
+      await interaction.showModal(buildTradeModal());
+    } catch (err) {
+      console.error('Show trade modal error:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: '❌ Failed to open trade form. Please try again.', ephemeral: true }).catch(() => {});
+      }
+    }
     return;
   }
 
   if (interaction.isButton() && interaction.customId === 'journal_check_achievements') {
     await interaction.deferReply({ ephemeral: true });
-    await interaction.editReply({ embeds: [buildMyAchievements(interaction.user.id)] });
+    try {
+      await interaction.editReply({ embeds: [buildMyAchievements(interaction.user.id)] });
+    } catch (err) {
+      console.error('Achievements panel error:', err);
+      await interaction.editReply('❌ Error loading achievements. Please try again.').catch(() => {});
+    }
     return;
   }
 
   if (interaction.isButton() && interaction.customId === 'journal_submit_earnings') {
-    await interaction.showModal(buildEarningsModal());
+    try {
+      await interaction.showModal(buildEarningsModal());
+    } catch (err) {
+      console.error('Show earnings modal error:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: '❌ Failed to open form. Please try again.', ephemeral: true }).catch(() => {});
+      }
+    }
     return;
   }
 
@@ -248,7 +274,7 @@ async function handleJournalInteraction(interaction, client) {
       userRecord.trades.push(data);
       saveDB(db);
 
-      if (!journalChannel) return interaction.editReply('⚠️ Journal channel not found.');
+      if (!journalChannel) return interaction.editReply('⚠️ Journal channel not found. Ask an admin to set up the journal channel.');
 
       const member = await interaction.guild.members.fetch(interaction.user.id);
       const thread = await getOrCreateUserThread(member, journalChannel, db, userRecord);
@@ -268,29 +294,34 @@ async function handleJournalInteraction(interaction, client) {
 
   if (interaction.isModalSubmit() && interaction.customId === 'journal_earnings_modal') {
     await interaction.deferReply({ ephemeral: true });
-    const weeklyPnl = interaction.fields.getTextInputValue('weekly_pnl');
-    const screenshotNote = interaction.fields.getTextInputValue('screenshot_note');
-    const adminChannel = interaction.guild.channels.cache.get(process.env.ADMIN_CHANNEL_ID);
-    if (adminChannel) {
-      const embed = new EmbedBuilder()
-        .setColor(0xF5F0E8)
-        .setTitle('💰 Weekly Earnings Submission')
-        .setDescription(`**${interaction.user.username}** submitted weekly earnings for verification.`)
-        .addFields(
-          { name: '💰 Reported PnL', value: weeklyPnl, inline: true },
-          { name: '👤 User', value: `${interaction.user}`, inline: true },
-          { name: '📎 Proof', value: screenshotNote, inline: false },
-        )
-        .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate 🪽 • Approve or Deny' })
-        .setTimestamp();
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`journal_earnings_approve_${interaction.user.id}`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`journal_earnings_deny_${interaction.user.id}`).setLabel('❌ Deny').setStyle(ButtonStyle.Danger),
-      );
-      await adminChannel.send({ embeds: [embed], components: [row] });
+    try {
+      const weeklyPnl = interaction.fields.getTextInputValue('weekly_pnl');
+      const screenshotNote = interaction.fields.getTextInputValue('screenshot_note');
+      const adminChannel = interaction.guild.channels.cache.get(process.env.ADMIN_CHANNEL_ID);
+      if (adminChannel) {
+        const embed = new EmbedBuilder()
+          .setColor(0xF5F0E8)
+          .setTitle('💰 Weekly Earnings Submission')
+          .setDescription(`**${interaction.user.username}** submitted weekly earnings for verification.`)
+          .addFields(
+            { name: '💰 Reported PnL', value: weeklyPnl, inline: true },
+            { name: '👤 User', value: `${interaction.user}`, inline: true },
+            { name: '📎 Proof', value: screenshotNote, inline: false },
+          )
+          .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png' }))
+          .setFooter({ text: 'Elevate 🪹 • Approve or Deny' })
+          .setTimestamp();
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`journal_earnings_approve_${interaction.user.id}`).setLabel('✅ Approve').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`journal_earnings_deny_${interaction.user.id}`).setLabel('❌ Deny').setStyle(ButtonStyle.Danger),
+        );
+        await adminChannel.send({ embeds: [embed], components: [row] });
+      }
+      await interaction.editReply('✅ Submitted for admin review! You\'ll be notified once approved.');
+    } catch (err) {
+      console.error('Earnings submission error:', err);
+      await interaction.editReply('❌ Error submitting earnings. Please try again.').catch(() => {});
     }
-    await interaction.editReply('✅ Submitted for admin review! You\'ll be notified once approved.');
     return;
   }
 
@@ -300,15 +331,20 @@ async function handleJournalInteraction(interaction, client) {
     }
     const targetId = interaction.customId.replace('journal_earnings_approve_', '');
     await interaction.deferUpdate();
-    const db = loadDB();
-    if (!db[targetId]) db[targetId] = { trades: [], verifiedWeeks: 0 };
-    db[targetId].verifiedWeeks = (db[targetId].verifiedWeeks || 0) + 1;
-    saveDB(db);
-    const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-    await checkAchievements(targetId, targetMember?.user.username || 'User', computeStats(db[targetId].trades || [], db[targetId].verifiedWeeks), interaction.guild, addXP);
-    await addXP(targetId, targetMember?.user.username || 'User', 200, interaction.guild);
-    await interaction.editReply({ content: `✅ Approved! +200 XP awarded to ${targetMember || targetId}.`, components: [] });
-    try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪽'); } catch {}
+    try {
+      const db = loadDB();
+      if (!db[targetId]) db[targetId] = { trades: [], verifiedWeeks: 0 };
+      db[targetId].verifiedWeeks = (db[targetId].verifiedWeeks || 0) + 1;
+      saveDB(db);
+      const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+      await checkAchievements(targetId, targetMember?.user.username || 'User', computeStats(db[targetId].trades || [], db[targetId].verifiedWeeks), interaction.guild, addXP);
+      await addXP(targetId, targetMember?.user.username || 'User', 200, interaction.guild);
+      await interaction.editReply({ content: `✅ Approved! +200 XP awarded to ${targetMember || targetId}.`, components: [] });
+      try { await targetMember?.send('✅ Your weekly earnings were **approved**! +200 XP added. 🪹'); } catch {}
+    } catch (err) {
+      console.error('Approve earnings error:', err);
+      await interaction.editReply({ content: '❌ Error processing approval.', components: [] }).catch(() => {});
+    }
     return;
   }
 
@@ -318,30 +354,40 @@ async function handleJournalInteraction(interaction, client) {
     }
     const targetId = interaction.customId.replace('journal_earnings_deny_', '');
     await interaction.deferUpdate();
-    const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-    await interaction.editReply({ content: `❌ Denied submission from ${targetMember || targetId}.`, components: [] });
-    try { await targetMember?.send('❌ Your weekly earnings submission was **denied**. Please include valid screenshot proof.'); } catch {}
+    try {
+      const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+      await interaction.editReply({ content: `❌ Denied submission from ${targetMember || targetId}.`, components: [] });
+      try { await targetMember?.send('❌ Your weekly earnings submission was **denied**. Please include valid screenshot proof.'); } catch {}
+    } catch (err) {
+      console.error('Deny earnings error:', err);
+      await interaction.editReply({ content: '❌ Error processing denial.', components: [] }).catch(() => {});
+    }
     return;
   }
 
   if (interaction.isChatInputCommand() && interaction.commandName === 'journal') {
     await interaction.deferReply({ ephemeral: true });
-    const db = loadDB();
-    const userData = db[interaction.user.id];
-    if (!userData?.trades?.length) return interaction.editReply('No trades logged yet!');
-    const stats = computeStats(userData.trades, userData.verifiedWeeks || 0);
-    const embed = new EmbedBuilder()
-      .setColor(0xF5F0E8)
-      .setTitle(`📊 ${interaction.user.username}'s Stats`)
-      .addFields(
-        { name: '📋 Total Trades', value: `${stats.total}`, inline: true },
-        { name: '🏆 Win Rate', value: `${stats.winRate.toFixed(1)}%`, inline: true },
-        { name: '🔥 Current Streak', value: `${stats.streak}`, inline: true },
-        { name: '✅ Wins', value: `${stats.wins}`, inline: true },
-        { name: '💰 Verified Weeks', value: `${stats.verifiedWeeks}`, inline: true },
-      )
-      .setFooter({ text: 'Elevate 🪽 • Only you can see this' });
-    await interaction.editReply({ embeds: [embed] });
+    try {
+      const db = loadDB();
+      const userData = db[interaction.user.id];
+      if (!userData?.trades?.length) return interaction.editReply('No trades logged yet!');
+      const stats = computeStats(userData.trades, userData.verifiedWeeks || 0);
+      const embed = new EmbedBuilder()
+        .setColor(0xF5F0E8)
+        .setTitle(`📊 ${interaction.user.username}'s Stats`)
+        .addFields(
+          { name: '📋 Total Trades', value: `${stats.total}`, inline: true },
+          { name: '🏆 Win Rate', value: `${stats.winRate.toFixed(1)}%`, inline: true },
+          { name: '🔥 Current Streak', value: `${stats.streak}`, inline: true },
+          { name: '✅ Wins', value: `${stats.wins}`, inline: true },
+          { name: '💰 Verified Weeks', value: `${stats.verifiedWeeks}`, inline: true },
+        )
+        .setFooter({ text: 'Elevate 🪹 • Only you can see this' });
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error('Journal stats error:', err);
+      await interaction.editReply('❌ Error loading stats. Please try again.').catch(() => {});
+    }
   }
 }
 
