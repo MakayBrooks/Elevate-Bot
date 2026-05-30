@@ -479,14 +479,14 @@ function buildJournalPageEmbed(trades, page, username) {
 
   // Average R:R
   const rrValues = trades.map(t => {
-    const m = (t.rr||'').match(/(d+(?:.d+)?)s*:s*(d+(?:.d+)?)/);
+    const m = (t.rr||'').match(/(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/);
     return m ? parseFloat(m[2]) / parseFloat(m[1]) : null;
   }).filter(v => v !== null);
   const avgRR = rrValues.length > 0 ? (rrValues.reduce((a,b) => a+b, 0) / rrValues.length).toFixed(2) : 'N/A';
 
   // Total PnL (sum of numeric values)
   const totalPnl = trades.reduce((sum, t) => {
-    const m = (t.pnl||'').replace(/,/g,'').match(/([+-]?d+(?:.d+)?)/);
+    const m = (t.pnl||'').replace(/,/g,'').match(/([+-]?\d+(?:\.\d+)?)/);
     return sum + (m ? parseFloat(m[1]) : 0);
   }, 0);
   const pnlStr = (totalPnl >= 0 ? '+' : '') + '
