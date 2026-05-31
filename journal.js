@@ -20,7 +20,7 @@ function saveDB(data) {
 // In-memory state for multi-step trade form
 const tradeFormState = new Map();
 
-// ── Thread management ──────────────────────────────────────────────────────
+// ââ Thread management ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 async function getOrCreateUserThread(member, channel, db, userRecord) {
   if (userRecord.threadId) {
     try {
@@ -67,7 +67,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
   return thread;
 }
 
-// ── Journal panel ──────────────────────────────────────────────────────────
+// ââ Journal panel ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 async function sendJournalPanel(channel) {
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
@@ -90,7 +90,6 @@ async function sendJournalPanel(channel) {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('journal_log_trade').setLabel('\u{1F4DD} Log a Trade').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('journal_check_achievements').setLabel('\u{1F3C6} My Achievements').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('journal_submit_earnings').setLabel('\u{1F4B0} Submit Weekly Earnings').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('journal_my_journal').setLabel('\u{1F4DA} My Journal').setStyle(ButtonStyle.Secondary),
   );
@@ -103,7 +102,7 @@ async function sendJournalPanel(channel) {
   return msg;
 }
 
-// ── Step 1 selection message ───────────────────────────────────────────────
+// ââ Step 1 selection message âââââââââââââââââââââââââââââââââââââââââââââââ
 function buildTradeFormMessage(state = {}) {
   const outcome = state.outcome || null;
   const position = state.position || null;
@@ -186,7 +185,7 @@ function buildTradeFormMessage(state = {}) {
   return { embeds: [embed], components: [outcomeRow, posRow, sessionRow, rrRow, btnRow], flags: MessageFlags.Ephemeral };
 }
 
-// ── Step 2 modal (pair, pnl, notes only) ──────────────────────────────────
+// ââ Step 2 modal (pair, pnl, notes only) ââââââââââââââââââââââââââââââââââ
 function buildTradeModal2() {
   return new ModalBuilder()
     .setCustomId('journal_modal_submit')
@@ -227,7 +226,7 @@ function buildTradeModal2() {
     );
 }
 
-// ── Weekly earnings modal ──────────────────────────────────────────────────
+// ââ Weekly earnings modal ââââââââââââââââââââââââââââââââââââââââââââââââââ
 function buildEarningsModal() {
   return new ModalBuilder()
     .setCustomId('journal_earnings_modal')
@@ -252,7 +251,7 @@ function buildEarningsModal() {
     );
 }
 
-// ── Trade embed ────────────────────────────────────────────────────────────
+// ââ Trade embed ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function buildTradeEmbed(member, data, tradeNumber) {
   const outcome = (data.outcome || '').trim().toLowerCase();
   const position = (data.position || '').trim().toLowerCase();
@@ -287,7 +286,7 @@ function buildTradeEmbed(member, data, tradeNumber) {
     .setTimestamp();
 }
 
-// ── My Journal helpers ─────────────────────────────────────────────────────
+// ââ My Journal helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const TRADES_PER_PAGE = 5;
 
 function buildJournalPageEmbed(trades, page, username) {
@@ -411,7 +410,7 @@ async function handleMyJournal(interaction, page = 0) {
   };
 }
 
-// ── Main interaction handler ───────────────────────────────────────────────
+// ââ Main interaction handler âââââââââââââââââââââââââââââââââââââââââââââââ
 async function handleJournalInteraction(interaction, client) {
   const journalChannel = interaction.guild.channels.cache.get(process.env.JOURNAL_CHANNEL_ID);
   const { addXP } = require('./levels');
@@ -461,7 +460,7 @@ async function handleJournalInteraction(interaction, client) {
     return;
   }
 
-  // ── Log Trade step 1: show selection form ──────────────────────────────
+  // ââ Log Trade step 1: show selection form ââââââââââââââââââââââââââââââ
   if (interaction.isButton() && interaction.customId === 'journal_log_trade') {
     try {
       tradeFormState.set(interaction.user.id, {});
@@ -472,7 +471,7 @@ async function handleJournalInteraction(interaction, client) {
     return;
   }
 
-  // ── Form select menus ──────────────────────────────────────────────────
+  // ââ Form select menus ââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (interaction.isStringSelectMenu() && ['journal_form_outcome','journal_form_position','journal_form_session','journal_form_rr'].includes(interaction.customId)) {
     await interaction.deferUpdate();
     try {
@@ -487,7 +486,7 @@ async function handleJournalInteraction(interaction, client) {
     return;
   }
 
-  // ── Continue button → show modal ───────────────────────────────────────
+  // ââ Continue button â show modal âââââââââââââââââââââââââââââââââââââââ
   if (interaction.isButton() && interaction.customId === 'journal_form_continue') {
     try {
       await interaction.showModal(buildTradeModal2());
@@ -497,7 +496,7 @@ async function handleJournalInteraction(interaction, client) {
     return;
   }
 
-  // ── Modal submit ────────────────────────────────────────────────────────
+  // ââ Modal submit ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (interaction.isModalSubmit() && interaction.customId === 'journal_modal_submit') {
     await interaction.deferReply({ ephemeral: true });
     try {
@@ -534,6 +533,7 @@ async function handleJournalInteraction(interaction, client) {
       await addXP(interaction.user.id, interaction.user.username, 75, interaction.guild);
       const stats = computeStats(userRecord.trades, userRecord.verifiedWeeks || 0);
       await checkAchievements(interaction.user.id, interaction.user.username, stats, interaction.guild, addXP);
+      await checkMilestoneRoles(member, userRecord.trades, thread).catch(err => console.error('Milestone roles error:', err));
 
       await interaction.editReply(`\u2705 Trade #${userRecord.trades.length} logged! +**75 XP** earned.\u{1F4CE} Attach chart screenshots in your thread.`);
     } catch (err) {
@@ -544,7 +544,7 @@ async function handleJournalInteraction(interaction, client) {
     return;
   }
 
-  // ── Achievements ────────────────────────────────────────────────────────
+  // ââ Achievements ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (interaction.isButton() && interaction.customId === 'journal_check_achievements') {
     await interaction.deferReply({ ephemeral: true });
     try {
@@ -556,7 +556,7 @@ async function handleJournalInteraction(interaction, client) {
     return;
   }
 
-  // ── Submit weekly earnings ───────────────────────────────────────────────
+  // ââ Submit weekly earnings âââââââââââââââââââââââââââââââââââââââââââââââ
   if (interaction.isButton() && interaction.customId === 'journal_submit_earnings') {
     try {
       await interaction.showModal(buildEarningsModal());
@@ -645,4 +645,54 @@ async function handleJournalInteraction(interaction, client) {
   }
 }
 
-module.exports = { handleJournalInteraction, sendJournalPanel, loadDB };
+
+// ── Milestone role assignment ─────────────────────────────────────────
+async function checkMilestoneRoles(member, trades, thread) {
+  const tradeMilestones = [
+    { count: 1, roleName: "📝 First Trade" },
+    { count: 10, roleName: "📊 10 Trades" },
+    { count: 50, roleName: "📈 50 Trades" },
+    { count: 100, roleName: "💎 100 Trades" },
+  ];
+  const streakMilestones = [
+    { streak: 3, roleName: "🔥 3-Streak" },
+    { streak: 5, roleName: "⚡ 5-Streak" },
+    { streak: 10, roleName: "👑 10-Streak" },
+  ];
+  let currentStreak = 0;
+  for (let i = trades.length - 1; i >= 0; i--) {
+    if ((trades[i].outcome || "").toLowerCase().startsWith("w")) currentStreak++;
+    else break;
+  }
+  const guild = member.guild;
+  const msgs = [];
+  for (const m of tradeMilestones) {
+    if (trades.length === m.count) {
+      const role = guild.roles.cache.find(r => r.name.toLowerCase() === m.roleName.toLowerCase());
+      if (role && !member.roles.cache.has(role.id)) {
+        await member.roles.add(role).catch(() => {});
+        msgs.push("🎉 You've logged **" + m.count + "** trade" + (m.count > 1 ? "s" : "") + "! You earned the **" + m.roleName + "** role!");
+      }
+    }
+  }
+  for (const sm of streakMilestones) {
+    if (currentStreak === sm.streak) {
+      const role = guild.roles.cache.find(r => r.name.toLowerCase() === sm.roleName.toLowerCase());
+      if (role && !member.roles.cache.has(role.id)) {
+        await member.roles.add(role).catch(() => {});
+        msgs.push("🔥 You're on a **" + sm.streak + "-win streak**! You earned the **" + sm.roleName + "** role!");
+      }
+    }
+  }
+  if (msgs.length > 0 && thread) {
+    const embed = new EmbedBuilder()
+      .setColor(0xffd700)
+      .setTitle("🏆 Milestone Reached!")
+      .setDescription(msgs.join("\n"))
+      .setThumbnail(member.user.displayAvatarURL({ extension: "png" }))
+      .setFooter({ text: "Elevate 🪽 • Trading Milestones" })
+      .setTimestamp();
+    await thread.send({ embeds: [embed] }).catch(() => {});
+  }
+}
+module.exports = { handleJournalInteraction, sendJournalPanel, loadDB, checkMilestoneRoles };
