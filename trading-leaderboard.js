@@ -33,41 +33,23 @@ function computeTradeStats(trades) {
   return { total: trades.length, wins, losses, winRate, bestStreak: best, totalPnl, avgRR };
 }
 
-// Auto-create the trading leaderboard channel if not configured
 async function getOrCreateTradingLbChannel(guild) {
   const store = getStore();
   if (!store._config) store._config = {};
-
-  // Check stored ID
   if (store._config.tradingLbChannelId) {
     const stored = guild.channels.cache.get(store._config.tradingLbChannelId);
     if (stored) return stored;
   }
-
-  // Check env var
   if (process.env.TRADING_LB_CHANNEL_ID) {
     const envCh = guild.channels.cache.get(process.env.TRADING_LB_CHANNEL_ID);
     if (envCh) { store._config.tradingLbChannelId = envCh.id; markDirty(); return envCh; }
   }
-
-  // Look up by name
   const byName = guild.channels.cache.find(ch => ch.name.includes('trading-leaderboard') || ch.name.includes('trading-lb'));
   if (byName) { store._config.tradingLbChannelId = byName.id; markDirty(); return byName; }
-
-  // Create it
   try {
-    const ch = await guild.channels.create({
-      name: '📈│trading-leaderboard',
-      type: ChannelType.GuildText,
-      reason: 'Trading leaderboard channel',
-    });
-    console.log('📈 Created trading leaderboard channel: ' + ch.id);
-    store._config.tradingLbChannelId = ch.id;
-    markDirty();
-    return ch;
-  } catch (e) {
-    console.error('Failed to create trading LB channel:', e.message);
-  }
+    const ch = await guild.channels.create({ name: '📈│trading-leaderboard', type: ChannelType.GuildText, reason: 'Trading leaderboard channel' });
+    store._config.tradingLbChannelId = ch.id; markDirty(); return ch;
+  } catch (e) { console.error('Failed to create trading LB channel:', e.message); }
   return null;
 }
 
@@ -77,7 +59,7 @@ async function buildTradingLeaderboardEmbed(guild) {
   const rows = [];
 
   for (const [userId, userData] of Object.entries(db)) {
-    if (userId.startsWith('_') || !userData.trades || userData.trades.length < 5) continue;
+    if (userId.startsWith('_') || !userData.trades || userData.trades.length < 1) continue;
     const stats = computeTradeStats(userData.trades);
     if (!stats) continue;
     let name = levelsDb.users?.[userId]?.username || userId;
@@ -91,10 +73,10 @@ async function buildTradingLeaderboardEmbed(guild) {
   const embed = new EmbedBuilder()
     .setColor(0x00c853)
     .setTitle('📈 Trading Leaderboard')
-    .setDescription('> Top traders ranked by **Win Rate** (min. 5 trades).\n​');
+    .setDescription('> Top traders ranked by **Win Rate** (min. 1 trade).\n​');
 
   if (top.length === 0) {
-    embed.addFields({ name: 'No qualifiers yet', value: 'Log at least **5 trades** to appear here.', inline: false });
+    embed.addFields({ name: 'No traders yet', value: 'Log at least **1 trade** to appear here.', inline: false });
   } else {
     const medals = ['🥇','🥈','🥉'];
     top.forEach((row, i) => {
@@ -124,21 +106,15 @@ async function postTradingLeaderboard(channel) {
     new ButtonBuilder().setCustomId('trading_lb_refresh').setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('journal_check_achievements').setLabel('🏆 My Achievements').setStyle(ButtonStyle.Secondary),
   );
-
   const db = loadJournalDB();
   if (db._tradingLbMessageId) {
-    try {
-      const msg = await channel.messages.fetch(db._tradingLbMessageId);
-      await msg.edit({ embeds: [embed], components: [row] });
-      return msg;
-    } catch {}
+    try { const msg = await channel.messages.fetch(db._tradingLbMessageId); await msg.edit({ embeds: [embed], components: [row] }); return msg; } catch {}
   }
   try {
     const pinned = await channel.messages.fetchPinned();
     const existing = pinned.find(m => m.author.id === channel.client.user.id && m.embeds?.[0]?.title?.includes('Trading Leaderboard'));
     if (existing) { await existing.edit({ embeds: [embed], components: [row] }); db._tradingLbMessageId = existing.id; markDirty(); return existing; }
   } catch {}
-
   const msg = await channel.send({ embeds: [embed], components: [row] });
   await msg.pin().catch(()=>{});
   db._tradingLbMessageId = msg.id;
@@ -155,9 +131,7 @@ async function refreshTradingLeaderboard(interaction) {
       new ButtonBuilder().setCustomId('journal_check_achievements').setLabel('🏆 My Achievements').setStyle(ButtonStyle.Secondary),
     );
     await interaction.editReply({ embeds: [embed], components: [row] });
-  } catch (err) {
-    if (err.code === 10062) return;
-  }
+  } catch (err) { if (err.code === 10062) return; }
 }
 
 module.exports = { postTradingLeaderboard, refreshTradingLeaderboard, getOrCreateTradingLbChannel };
