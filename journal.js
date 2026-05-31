@@ -17,7 +17,7 @@ function saveDB(data) {
   markDirty();
 }
 
-// Get or create per-user trade thread in text channel
+// Get or create per-user private trade thread
 async function getOrCreateUserThread(member, channel, db, userRecord) {
   if (userRecord.threadId) {
     try {
@@ -29,28 +29,13 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
     } catch {}
   }
   const thread = await channel.threads.create({
-    name: `📚 ${member.user.username}'s Trades`,
+    name: `📚 ${member.user.username}`,
+    type: ChannelType.PrivateThread,
     autoArchiveDuration: 10080,
-    reason: `Trade log for ${member.user.username}`,
+    invitable: false,
+    reason: `Trade journal for ${member.user.username}`,
   });
-  await thread.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(0xF5F0E8)
-        .setTitle(`📚 ${member.user.username}'s Trading Journal`)
-        .setDescription(
-          `> Trade log for **${member.user.username}**.
-
-` +
-          `All entries are logged here automatically.
-` +
-          `📎 **Attach chart screenshots directly after each entry.**`
-        )
-        .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate 🪽 • Trading Journal' })
-        .setTimestamp()
-    ]
-  });
+  await thread.members.add(member.id);
   userRecord.threadId = thread.id;
   saveDB(db);
   return thread;
