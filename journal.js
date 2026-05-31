@@ -40,6 +40,21 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
       invitable: false,
     });
     await thread.members.add(member.id);
+  await thread.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xF5F0E8)
+        .setTitle(`\u{1F4DA} ${member.user.username}'s Trading Journal`)
+        .setDescription(
+          `Trade log for **${member.user.username}**.\n\n` +
+          `All entries are logged here automatically.\n` +
+          `\u{1F4CE} **Attach chart screenshots directly after each entry.**`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
+        .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Trading Journal' })
+        .setTimestamp()
+    ]
+  });
   } catch {
     // Fallback: public thread (server may not have Community enabled)
     thread = await channel.threads.create({
