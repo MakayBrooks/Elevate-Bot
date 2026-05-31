@@ -68,6 +68,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
 }
 
 // ââ Journal panel ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Journal panel ──────────────────────────────────────────────────────────
 async function sendJournalPanel(channel) {
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
@@ -75,18 +76,15 @@ async function sendJournalPanel(channel) {
     .setDescription(
       '> Log your trades, unlock achievements, and earn XP.\n' +
       '> Click **Log a Trade** to submit a new trade entry.\n' +
-      '> Click **My Achievements** to see your private progress.\n' +
       '> Click **Submit Weekly Earnings** for verified leaderboard.\n\u200b'
     )
     .addFields(
       { name: '\u2728 XP Per Trade', value: '+75 XP for every trade logged', inline: true },
-      { name: '\u{1F3C6} Achievements', value: 'Earn bonus XP for milestones', inline: true },
+      { name: '\u{1F3C6} Milestones', value: 'Earn roles & bonus XP', inline: true },
       { name: '\u{1F4CE} Charts', value: 'Attach screenshots in your thread', inline: true },
     )
     .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Trading Journal' })
     .setTimestamp();
-
-  const achEmbed = buildAchievementsPanel();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('journal_log_trade').setLabel('\u{1F4DD} Log a Trade').setStyle(ButtonStyle.Primary),
@@ -94,7 +92,18 @@ async function sendJournalPanel(channel) {
     new ButtonBuilder().setCustomId('journal_my_journal').setLabel('\u{1F4DA} My Journal').setStyle(ButtonStyle.Secondary),
   );
 
-  const msg = await channel.send({ embeds: [logEmbed, achEmbed], components: [row] });
+  // Delete any existing bot journal panels before posting fresh one
+  try {
+    const pinned = await channel.messages.fetchPinned();
+    const oldPanels = pinned.filter(m => m.author.id === channel.client.user.id && m.embeds?.[0]?.title?.includes('Trading Journal'));
+    for (const [, msg] of oldPanels) { await msg.unpin().catch(()=>{}); await msg.delete().catch(()=>{}); }
+    // Also scan recent messages for duplicates
+    const recent = await channel.messages.fetch({ limit: 20 });
+    const oldRecent = recent.filter(m => m.author.id === channel.client.user.id && (m.embeds?.[0]?.title?.includes('Trading Journal') || m.embeds?.[0]?.title?.includes('Trading Achievements') || m.embeds?.[1]?.title?.includes('Trading Achievements')));
+    for (const [, msg] of oldRecent) { await msg.delete().catch(()=>{}); }
+  } catch {}
+
+  const msg = await channel.send({ embeds: [logEmbed], components: [row] });
   await msg.pin().catch(() => {});
   const db = loadDB();
   db._panelMessageId = msg.id;
