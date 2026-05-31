@@ -14,6 +14,9 @@ const {
   getUser, loadDB: loadLevelsDB, saveDB: saveLevelsDB
 } = require('./levels');
 const commands = require('./commands');
+const { postTicketCard, markTicketUpdated, runTicketCatchup } = require('./tickets');
+const { postTradingLeaderboard } = require('./trading-leaderboard');
+const { loadDB: loadJournalDB } = require('./journal');
 
 const client = new Client({
   intents: [
@@ -82,15 +85,137 @@ client.once('ready', async () => {
     }
   } catch (err) { console.error('❌ Shop panel error:', err); }
 
+
+  // Trading leaderboard panel
+  try {
+    if (guild) {
+      const lbChannel2 = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
+      if (lbChannel2) {
+        await postTradingLeaderboard(lbChannel2, guild);
+        console.log('✅ Trading leaderboard panel ready.');
+      }
+    }
+  } catch (err) { console.error('❌ Trading leaderboard error:', err); }
+
+  // Ticket catch-up cards
+  try {
+    if (guild) {
+      const ticketsAdminCh = guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
+      if (ticketsAdminCh) {
+        await runTicketCatchup(guild, ticketsAdminCh);
+      }
+    }
+  } catch (err) { console.error('❌ Ticket catchup error:', err); }
+
   startPassiveXP(client);
 
   cron.schedule('0 19 * * 0', async () => {
     if (guild) await postWeeklyCalendar(guild, client);
   }, { timezone: 'America/New_York' });
 
+
+  // Trade of the Week — Sunday 8PM ET
+  cron.schedule('0 20 * * 0', async () => {
+    try {
+      if (!guild) return;
+      const winsChannel = guild.channels.cache.get(process.env.WINS_CHANNEL_ID);
+      if (!winsChannel) return;
+      const journalDb = loadJournalDB();
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      let bestTrade = null, bestRR = -1, bestUserId = null;
+      for (const [userId, userData] of Object.entries(journalDb)) {
+        if (userId.startsWith('_') || !userData || !userData.trades) continue;
+        for (const trade of userData.trades) {
+          if (!trade.timestamp || new Date(trade.timestamp) < weekAgo) continue;
+          const m = (trade.rr || '').match(/([\d.]+)\s*:\s*([\d.]+)/);
+          if (m) {
+            const rr = parseFloat(m[2]) / parseFloat(m[1]);
+            if (rr > bestRR) { bestRR = rr; bestTrade = trade; bestUserId = userId; }
+          }
+        }
+      }
+      if (!bestTrade || !bestUserId) { console.log('📅 No trades logged this week — skipping Trade of the Week.'); return; }
+      const winner = await guild.members.fetch(bestUserId).catch(() => null);
+      const { EmbedBuilder: EB } = require('discord.js');
+      const embed = new EB()
+        .setColor(0xffd700)
+        .setTitle('🏆 Trade of the Week!')
+        .setDescription('Congrats to **' + (winner ? winner.displayName : 'Unknown') + '** for the best trade this week! 🎉')
+        .addFields(
+          { name: '📊 Pair', value: bestTrade.pair || 'N/A', inline: true },
+          { name: '⚖️ R:R', value: bestTrade.rr || 'N/A', inline: true },
+          { name: '✅ Outcome', value: bestTrade.outcome || 'N/A', inline: true },
+          { name: '💰 PnL', value: bestTrade.pnl || 'N/A', inline: true },
+          { name: '🌐 Session', value: bestTrade.session || 'N/A', inline: true },
+        )
+        .setThumbnail(winner ? winner.user.displayAvatarURL({ extension: 'png' }) : null)
+        .setFooter({ text: 'Elevate 🪽 • Trade of the Week' })
+        .setTimestamp();
+      await winsChannel.send({ embeds: [embed] });
+      console.log('🏆 Trade of the Week posted!');
+    } catch (err) { console.error('❌ Trade of the Week error:', err); }
+  }, { timezone: 'America/New_York' });
+
+  // NY Open — weekdays 9:30 AM ET
+  cron.schedule('30 9 * * 1-5', async () => {
+    try {
+      if (!guild) return;
+      const ch = guild.channels.cache.get(process.env.TRADE_RECAPS_CHANNEL_ID);
+      if (!ch) return;
+      const now = new Date();
+      const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+      const dateStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric', year: 'numeric' });
+      const { EmbedBuilder: EB2 } = require('discord.js');
+      const embed = new EB2()
+        .setColor(0x57F287)
+        .setTitle('🔔 New York Open')
+        .setDescription('**' + dayName + ', ' + dateStr + '**\n\n> The New York session is now live. Stay focused, trust your process. Let\'s get it. 🇺🇸')
+        .setFooter({ text: 'Elevate 🪽 • Market Open' })
+        .setTimestamp();
+      await ch.send({ embeds: [embed] });
+    } catch (err) { console.error('❌ NY Open error:', err); }
+  }, { timezone: 'America/New_York' });
+
+  // London Open — weekdays 2:00 AM ET
+  cron.schedule('0 2 * * 1-5', async () => {
+    try {
+      if (!guild) return;
+      const ch = guild.channels.cache.get(process.env.TRADE_RECAPS_CHANNEL_ID);
+      if (!ch) return;
+      const now = new Date();
+      const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+      const dateStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric', year: 'numeric' });
+      const { EmbedBuilder: EB3 } = require('discord.js');
+      const embed = new EB3()
+        .setColor(0x5865F2)
+        .setTitle('🇬🇧 London Open')
+        .setDescription('**' + dayName + ', ' + dateStr + '**\n\n> The London session is now live. Early birds get the move. Stay sharp. 🏴󠁧󠁢󠁥󠁮󠁧󠁿')
+        .setFooter({ text: 'Elevate 🪽 • Market Open' })
+        .setTimestamp();
+      await ch.send({ embeds: [embed] });
+    } catch (err) { console.error('❌ London Open error:', err); }
+  }, { timezone: 'America/New_York' });
+
+  console.log('✅ Cron jobs scheduled: Trade of Week (Sun 8PM), NY Open (9:30AM), London Open (2AM)');
   console.log('📅 Weekly calendar scheduled: Sunday 7PM ET');
 });
 
+
+// Ticket channel created — post card to admin tickets channel
+client.on('channelCreate', async (channel) => {
+  try {
+    const categoryId = process.env.TICKETS_CATEGORY_ID;
+    if (!categoryId || channel.parentId !== categoryId) return;
+    const guild = channel.guild;
+    const adminCh = guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
+    if (!adminCh) return;
+    // Wait briefly for first message
+    await new Promise(r => setTimeout(r, 3000));
+    const messages = await channel.messages.fetch({ limit: 5 }).catch(() => null);
+    const firstMsg = messages ? messages.filter(m => !m.author.bot).last() : null;
+    await postTicketCard(guild, channel, adminCh, firstMsg);
+  } catch (err) { console.error('❌ channelCreate ticket error:', err); }
+});
 // Welcome
 client.on('guildMemberAdd', async (member) => {
   try {
@@ -113,6 +238,12 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 // Message XP
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
+  // Check if message is in a ticket channel
+  const ticketCategoryId = process.env.TICKETS_CATEGORY_ID;
+  if (ticketCategoryId && message.channel.parentId === ticketCategoryId) {
+    const ticketsAdminCh = message.guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
+    if (ticketsAdminCh) markTicketUpdated(message.guild, message.channel, ticketsAdminCh).catch(() => {});
+  }
   const now = Date.now();
   const last = xpCooldowns.get(message.author.id) || 0;
   if (now - last < 60000) return;
@@ -142,6 +273,19 @@ client.on('interactionCreate', async (interaction) => {
       (interaction.isChatInputCommand() && interaction.commandName === 'journal')
     ) { await handleJournalInteraction(interaction, client); return; }
 
+    // Trading leaderboard refresh
+    if (interaction.isButton() && interaction.customId === 'trading_lb_refresh') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const lbCh = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
+        if (lbCh) await postTradingLeaderboard(lbCh, guild);
+        await interaction.editReply('✅ Trading leaderboard refreshed!');
+      } catch (err) {
+        console.error('❌ Trading LB refresh error:', err);
+        await interaction.editReply('❌ Error refreshing leaderboard.').catch(() => {});
+      }
+      return;
+    }
     // Rank button
     if (interaction.isButton() && interaction.customId === 'levels_check_rank') { await handleCheckRank(interaction, guild); return; }
 
