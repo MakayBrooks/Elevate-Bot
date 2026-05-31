@@ -160,7 +160,7 @@ client.once('ready', async () => {
   cron.schedule('30 9 * * 1-5', async () => {
     try {
       if (!guild) return;
-      const ch = guild.channels.cache.get(process.env.TRADE_RECAPS_CHANNEL_ID);
+      const ch = guild.channels.cache.get(process.env.MARKET_NEWS_CHANNEL_ID);
       if (!ch) return;
       const now = new Date();
       const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
@@ -176,11 +176,11 @@ client.once('ready', async () => {
     } catch (err) { console.error('❌ NY Open error:', err); }
   }, { timezone: 'America/New_York' });
 
-  // London Open — weekdays 2:00 AM ET
-  cron.schedule('0 2 * * 1-5', async () => {
+  // Asia Open — weekdays 2:00 AM ET
+  cron.schedule('0 20 * * 0-4', async () => {
     try {
       if (!guild) return;
-      const ch = guild.channels.cache.get(process.env.TRADE_RECAPS_CHANNEL_ID);
+      const ch = guild.channels.cache.get(process.env.MARKET_NEWS_CHANNEL_ID);
       if (!ch) return;
       const now = new Date();
       const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
@@ -188,15 +188,15 @@ client.once('ready', async () => {
       const { EmbedBuilder: EB3 } = require('discord.js');
       const embed = new EB3()
         .setColor(0x5865F2)
-        .setTitle('🇬🇧 London Open')
-        .setDescription('**' + dayName + ', ' + dateStr + '**\n\n> The London session is now live. Early birds get the move. Stay sharp. 🏴󠁧󠁢󠁥󠁮󠁧󠁿')
+        .setTitle('🇬🇧 Asia Open')
+        .setDescription('**' + dayName + ', ' + dateStr + '**\n\n> The Asia session is now live. Early birds get the move. Stay sharp. 🏴󠁧󠁢󠁥󠁮󠁧󠁿')
         .setFooter({ text: 'Elevate 🪽 • Market Open' })
         .setTimestamp();
       await ch.send({ embeds: [embed] });
-    } catch (err) { console.error('❌ London Open error:', err); }
+    } catch (err) { console.error('❌ Asia Open error:', err); }
   }, { timezone: 'America/New_York' });
 
-  console.log('✅ Cron jobs scheduled: Trade of Week (Sun 8PM), NY Open (9:30AM), London Open (2AM)');
+  console.log('✅ Cron jobs scheduled: Trade of Week (Sun 8PM), NY Open (9:30AM), Asia Open (2AM)');
   console.log('📅 Weekly calendar scheduled: Sunday 7PM ET');
 });
 
