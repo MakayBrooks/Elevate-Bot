@@ -15,7 +15,7 @@ const {
 } = require('./levels');
 const commands = require('./commands');
 const { postTicketCard, markTicketUpdated, runTicketCatchup } = require('./tickets');
-const { postTradingLeaderboard } = require('./trading-leaderboard');
+const { postTradingLeaderboard, getOrCreateTradingLbChannel } = require('./trading-leaderboard');
 const { loadDB: loadJournalDB } = require('./journal');
 
 const client = new Client({
@@ -58,7 +58,7 @@ client.once('ready', async () => {
     }
   } catch (err) { console.error('❌ Journal panel error:', err); }
 
-  // Leaderboard channel
+  // XP Leaderboard channel (levels panel only)
   try {
     if (guild) {
       const lbChannel = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
@@ -85,25 +85,21 @@ client.once('ready', async () => {
     }
   } catch (err) { console.error('❌ Shop panel error:', err); }
 
-
-  // Trading leaderboard panel
+  // Trading leaderboard — separate dedicated channel (auto-creates if needed)
   try {
     if (guild) {
-      const lbChannel2 = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
-      if (lbChannel2) {
-        await postTradingLeaderboard(lbChannel2, guild);
-        console.log('✅ Trading leaderboard panel ready.');
+      const tradingLbChannel = await getOrCreateTradingLbChannel(guild);
+      if (tradingLbChannel) {
+        await postTradingLeaderboard(tradingLbChannel);
+        console.log('✅ Trading leaderboard panel ready in #' + tradingLbChannel.name);
       }
     }
   } catch (err) { console.error('❌ Trading leaderboard error:', err); }
 
-  // Ticket catch-up cards
+  // Ticket hub + catch-up cards (always runs — creates hub if missing)
   try {
     if (guild) {
-      const ticketsAdminCh = guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
-      if (ticketsAdminCh) {
-        await runTicketCatchup(guild, ticketsAdminCh);
-      }
+      await runTicketCatchup(guild);
     }
   } catch (err) { console.error('❌ Ticket catchup error:', err); }
 
@@ -112,7 +108,6 @@ client.once('ready', async () => {
   cron.schedule('0 19 * * 0', async () => {
     if (guild) await postWeeklyCalendar(guild, client);
   }, { timezone: 'America/New_York' });
-
 
   // Trade of the Week — Sunday 8PM ET
   cron.schedule('0 20 * * 0', async () => {
@@ -176,7 +171,7 @@ client.once('ready', async () => {
     } catch (err) { console.error('❌ NY Open error:', err); }
   }, { timezone: 'America/New_York' });
 
-  // Asia Open — weekdays 2:00 AM ET
+  // Asia Open — weekdays 8PM ET (2AM Asia next day)
   cron.schedule('0 20 * * 0-4', async () => {
     try {
       if (!guild) return;
@@ -188,43 +183,39 @@ client.once('ready', async () => {
       const { EmbedBuilder: EB3 } = require('discord.js');
       const embed = new EB3()
         .setColor(0x5865F2)
-        .setTitle('🇬🇧 Asia Open')
-        .setDescription('**' + dayName + ', ' + dateStr + '**\n\n> The Asia session is now live. Early birds get the move. Stay sharp. 🏴󠁧󠁢󠁥󠁮󠁧󠁿')
+        .setTitle('🌏 Asia Open')
+        .setDescription('**' + dayName + ', ' + dateStr + '**\n\n> The Asia session is now live. Early birds get the move. Stay sharp. 🪽')
         .setFooter({ text: 'Elevate 🪽 • Market Open' })
         .setTimestamp();
       await ch.send({ embeds: [embed] });
     } catch (err) { console.error('❌ Asia Open error:', err); }
   }, { timezone: 'America/New_York' });
 
-  console.log('✅ Cron jobs scheduled: Trade of Week (Sun 8PM), NY Open (9:30AM), Asia Open (2AM)');
+  console.log('✅ Cron jobs scheduled: Trade of Week (Sun 8PM), NY Open (9:30AM), Asia Open (8PM)');
   console.log('📅 Weekly calendar scheduled: Sunday 7PM ET');
 });
 
-
-// Ticket channel created — post card to admin tickets channel
+// Ticket channel created — post card to tickets hub
 client.on('channelCreate', async (channel) => {
   try {
     const categoryId = process.env.TICKETS_CATEGORY_ID;
     if (!categoryId || channel.parentId !== categoryId) return;
     const guild = channel.guild;
-    const adminCh = guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
-    if (!adminCh) return;
     // Wait briefly for first message
     await new Promise(r => setTimeout(r, 3000));
     const messages = await channel.messages.fetch({ limit: 5 }).catch(() => null);
     const firstMsg = messages ? messages.filter(m => !m.author.bot).last() : null;
-    await postTicketCard(guild, channel, adminCh, firstMsg);
+    await postTicketCard(guild, channel, null, firstMsg);
   } catch (err) { console.error('❌ channelCreate ticket error:', err); }
 });
+
 // Welcome
 client.on('guildMemberAdd', async (member) => {
   try {
     const channel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
     if (!channel) return;
     const joinTimestamp = Math.floor(member.joinedTimestamp / 1000);
-    await channel.send(`🎉 Welcome to the community, ${member}🪽
-👤 We are now **${member.guild.memberCount}** members!
-🕐 Joined: <t:${joinTimestamp}:R>`);
+    await channel.send(`🎉 Welcome to the community, ${member} 🪽\n👤 We are now **${member.guild.memberCount}** members!\n🕐 Joined: <t:${joinTimestamp}:R>`);
     const cardBuffer = await generateWelcomeCard(member);
     await channel.send({ files: [new AttachmentBuilder(cardBuffer, { name: 'welcome.png' })] });
   } catch (err) { console.error('❌ Welcome error:', err); }
@@ -238,11 +229,9 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 // Message XP
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
-  // Check if message is in a ticket channel
   const ticketCategoryId = process.env.TICKETS_CATEGORY_ID;
   if (ticketCategoryId && message.channel.parentId === ticketCategoryId) {
-    const ticketsAdminCh = message.guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
-    if (ticketsAdminCh) markTicketUpdated(message.guild, message.channel, ticketsAdminCh).catch(() => {});
+    markTicketUpdated(message.guild, message.channel, null).catch(() => {});
   }
   const now = Date.now();
   const last = xpCooldowns.get(message.author.id) || 0;
@@ -277,8 +266,8 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton() && interaction.customId === 'trading_lb_refresh') {
       await interaction.deferReply({ ephemeral: true });
       try {
-        const lbCh = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
-        if (lbCh) await postTradingLeaderboard(lbCh, guild);
+        const tradingLbCh = await getOrCreateTradingLbChannel(guild);
+        if (tradingLbCh) await postTradingLeaderboard(tradingLbCh);
         await interaction.editReply('✅ Trading leaderboard refreshed!');
       } catch (err) {
         console.error('❌ Trading LB refresh error:', err);
@@ -286,6 +275,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       return;
     }
+
     // Rank button
     if (interaction.isButton() && interaction.customId === 'levels_check_rank') { await handleCheckRank(interaction, guild); return; }
 
