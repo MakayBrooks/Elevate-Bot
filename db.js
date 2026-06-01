@@ -60,7 +60,17 @@ function gistRequest(method, body = null) {
 let _store = null;
 let _saveQueue = Promise.resolve();
 
+// Safety flag: true only after loadAll() successfully finishes.
+// Prevents Gist saves if the bot starts up but fails to load real data,
+// which would otherwise overwrite a populated Gist with an empty store.
+let _loadComplete = false;
+
+// Tracks the user count we loaded at startup. If our current store
+// ever has fewer users than this, we refuse to save to Gist (data-loss guard).
+let _startupUserCount = 0;
+
 async function loadAll() {
+  _loadComplete = false;
   if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
     try {
       console.log('Loading DB from Gist...');
@@ -74,20 +84,25 @@ async function loadAll() {
           if (!parsed.journal) parsed.journal = {};
           _store = parsed;
           localSave(_store);
-          const userCount = Object.keys(_store.levels.users || {}).length;
-          console.log('DB loaded from Gist, users: ' + userCount);
+          _startupUserCount = Object.keys(_store.levels.users || {}).length;
+          _loadComplete = true;
+          console.log('✅ DB loaded from Gist, users: ' + _startupUserCount);
           return _store;
         }
       }
-      console.warn('Gist empty, checking local backup...');
+      console.warn('⚠️  Gist empty or invalid, checking local backup...');
     } catch (e) {
-      console.warn('Gist load failed: ' + e.message + ' - using local backup');
+      console.warn('⚠️  Gist load failed: ' + e.message + ' — falling back to local backup');
     }
   }
+
   _store = localLoad();
-  const userCount = Object.keys(_store.levels?.users || {}).length;
-  console.log('DB loaded from local, users: ' + userCount);
-  if (userCount > 0 && process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+  _startupUserCount = Object.keys(_store.levels?.users || {}).length;
+  _loadComplete = true;
+  console.log('✅ DB loaded from local, users: ' + _startupUserCount);
+
+  if (_startupUserCount > 0 && process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+    // Local had data but Gist didn't — push local data up to Gist now.
     saveToGist().catch(() => {});
   }
   return _store;
@@ -100,19 +115,41 @@ function getStore() {
 
 async function saveToGist() {
   if (!_store || !process.env.GIST_ID || !process.env.GITHUB_TOKEN) return;
+
+  if (!_loadComplete) {
+    console.warn('⚠️  Gist save blocked: loadAll() has not finished yet.');
+    return;
+  }
+
+  // DATA-LOSS GUARD: never overwrite Gist with fewer users than we loaded at startup.
+  // This prevents a failed-load → empty store → Gist wipe scenario.
+  const currentUserCount = Object.keys(_store.levels?.users || {}).length;
+  if (_startupUserCount > 0 && currentUserCount < _startupUserCount) {
+    console.error(
+      `🚨 SAFETY BLOCK: refusing Gist save — store has ${currentUserCount} users ` +
+      `but we loaded ${_startupUserCount} at startup. Possible data-loss prevented.`
+    );
+    return;
+  }
+
   try {
     await gistRequest('PATCH', {
       files: { [GIST_FILENAME]: { content: JSON.stringify(_store, null, 2) } }
     });
-    console.log('Saved to Gist, users: ' + Object.keys(_store.levels?.users || {}).length);
+    console.log('💾 Saved to Gist, users: ' + currentUserCount);
   } catch (e) {
-    console.warn('Gist save failed: ' + e.message);
+    console.warn('⚠️  Gist save failed: ' + e.message);
   }
 }
 
 // markDirty: save locally immediately, queue Gist save (debounced 500ms)
 let _gistTimer = null;
 function markDirty() {
+  if (!_loadComplete) {
+    // loadAll() hasn't finished — do not persist anything yet.
+    console.warn('⚠️  markDirty called before loadAll() completed — skipping save.');
+    return;
+  }
   localSave(_store);
   if (_gistTimer) clearTimeout(_gistTimer);
   _gistTimer = setTimeout(() => { saveToGist().catch(() => {}); }, 500);
