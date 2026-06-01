@@ -19,4 +19,8 @@ module.exports = [
     new SlashCommandBuilder()
       .setName('setup-leaderboard')
       .setDescription('Admin: reset leaderboard channel — deletes bot messages and reposts in correct order'),
+
+    new SlashCommandBuilder()
+      .setName('setup-start-here')
+      .setDescription('Admin: post the server onboarding embeds in the current channel'),
 ].map(cmd => cmd.toJSON());
