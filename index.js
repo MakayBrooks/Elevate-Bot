@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, REST, Routes, AttachmentBuilder } = require('discord.js');
 const cron = require('node-cron');
-const { loadAll } = require('./db');
+const { loadAll, getStore, markDirty } = require('./db');
 const { generateWelcomeCard } = require('./welcomeCard');
 const { postWeeklyCalendar } = require('./economicCalendar');
 const { handleJournalInteraction, sendJournalPanel } = require('./journal');
