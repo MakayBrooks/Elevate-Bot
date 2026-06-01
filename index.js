@@ -14,6 +14,7 @@ const {
   getUser, loadDB: loadLevelsDB, saveDB: saveLevelsDB
 } = require('./levels');
 const commands = require('./commands');
+const { postStartHerePanel } = require('./startHere');
 
 const client = new Client({
   intents: [
@@ -225,6 +226,9 @@ client.on('interactionCreate', async (interaction) => {
       console.error('❌ setup-leaderboard error:', err);
       await interaction.editReply('❌ Error: ' + err.message);
     }
+  }// /setup-start-here
+  if (interaction.commandName === 'setup-start-here') {
+    await postStartHerePanel(interaction, guild);
   }
 });
 
