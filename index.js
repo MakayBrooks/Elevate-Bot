@@ -18,6 +18,7 @@ const { postTicketCard, markTicketUpdated, runTicketCatchup, closeAllOpenTickets
 const { postTradingLeaderboard, getOrCreateTradingLbChannel } = require('./trading-leaderboard');
 const { loadDB: loadJournalDB } = require('./journal');
 
+const { postRolesPanel, handleRoleButton } = require('./roles');
 const client = new Client({
 intents: [
 GatewayIntentBits.Guilds,
