@@ -198,15 +198,21 @@ client.on('interactionCreate', async (interaction) => {
       if (!lbChannel) return interaction.editReply('❌ Leaderboard channel not found. Check LEADERBOARD_CHANNEL_ID.');
 
       // Delete all bot messages in the channel to start fresh
-      const fetched = await lbChannel.messages.fetch({ limit: 50 });
+      // Must unpin first — Discord won't delete pinned messages without unpin
+      const fetched = await lbChannel.messages.fetch({ limit: 100 });
       const botMsgs = fetched.filter(m => m.author.id === client.user.id);
-      for (const [, msg] of botMsgs) { await msg.delete().catch(() => {}); }
+      for (const [, msg] of botMsgs) {
+        if (msg.pinned) await msg.unpin().catch(() => {});
+        await msg.delete().catch(() => {});
+      }
 
-      // Clear stored message IDs so they get recreated
+      // Clear stored message IDs (stored on store.levels) so they get recreated fresh
       const { getStore, markDirty } = require('./db');
       const store = getStore();
-      delete store.leaderboardMessageId;
-      delete store.levelsPanelMessageId;
+      if (store.levels) {
+        delete store.levels.leaderboardMessageId;
+        delete store.levels.levelsPanelMessageId;
+      }
       markDirty();
 
       // 1. Post leaderboard first (top)
