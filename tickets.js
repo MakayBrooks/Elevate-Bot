@@ -23,7 +23,7 @@ async function getOrCreateTicketsHub(guild) {
     const adminRole = guild.roles.cache.find(r => r.permissions.has(PermissionFlagsBits.Administrator) && !r.managed);
     const everyoneRole = guild.roles.everyone;
     const hubChannel = await guild.channels.create({
-      name: '🎫│tickets-hub',
+      name: 'tickets-hub',
       type: ChannelType.GuildText,
       permissionOverwrites: [
         { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -32,7 +32,7 @@ async function getOrCreateTicketsHub(guild) {
       ],
       reason: 'Ticket hub for admin overview',
     });
-    console.log('🎫 Created tickets hub: ' + hubChannel.id);
+    console.log('Created tickets hub: ' + hubChannel.id);
     config.ticketsHubChannelId = hubChannel.id;
     markDirty();
     return hubChannel;
@@ -44,21 +44,21 @@ function buildTicketCard(ticketChannel, member, firstMessage) {
   const preview = firstMessage?.content?.substring(0, 200) || '*(no message)*';
   return new EmbedBuilder()
     .setColor(0xF5F0E8)
-    .setTitle(`🎫 ${ticketChannel.name}`)
+    .setTitle(`ticket: ${ticketChannel.name}`)
     .setDescription(`**${member?.user?.username || 'Unknown'}** opened a ticket.\n\n> ${preview}`)
     .setThumbnail(member?.user?.displayAvatarURL({ extension: 'png' }) || null)
     .addFields(
-      { name: '👤 User', value: `${member || 'Unknown'}`, inline: true },
-      { name: '📅 Opened', value: `<t:${Math.floor(ticketChannel.createdTimestamp / 1000)}:R>`, inline: true },
+      { name: 'User', value: `${member || 'Unknown'}`, inline: true },
+      { name: 'Opened', value: `<t:${Math.floor(ticketChannel.createdTimestamp / 1000)}:R>`, inline: true },
     )
-    .setFooter({ text: 'Elevate 🪽 • Ticket Hub' })
+    .setFooter({ text: 'Elevate - Ticket Hub' })
     .setTimestamp();
 }
 
 function buildTicketRow(ticketChannel) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setLabel('📂 Open Ticket')
+      .setLabel('Open Ticket')
       .setStyle(ButtonStyle.Link)
       .setURL(`https://discord.com/channels/${ticketChannel.guild.id}/${ticketChannel.id}`),
   );
@@ -86,16 +86,15 @@ async function postTicketCard(guild, ticketChannel, adminCh, firstMsg) {
   catch (e) { console.error('Failed to post ticket card:', e.message); }
 }
 
-// Stub — prevents TypeError when called from messageCreate handler
 async function markTicketUpdated(guild, ticketChannel, adminCh) {}
 
 async function runTicketCatchup(guild) {
   const hub = await getOrCreateTicketsHub(guild);
-  if (!hub) { console.error('🎫 Could not get/create tickets hub'); return; }
+  if (!hub) { console.error('Could not get/create tickets hub'); return; }
   const ticketChannels = guild.channels.cache.filter(ch =>
     ch.type === ChannelType.GuildText && /^ticket-/i.test(ch.name)
   );
-  if (ticketChannels.size === 0) { console.log('🎫 No existing tickets found.'); return; }
+  if (ticketChannels.size === 0) { console.log('No existing text-channel tickets found.'); return; }
   const existingCards = new Set();
   try {
     const msgs = await hub.messages.fetch({ limit: 100 });
@@ -111,8 +110,40 @@ async function runTicketCatchup(guild) {
     posted++;
     await new Promise(r => setTimeout(r, 300));
   }
-  if (posted > 0) console.log(`🎫 Posted ${posted} ticket catchup cards`);
-  else console.log('🎫 All ticket cards already posted.');
+  if (posted > 0) console.log(`Posted ${posted} ticket catchup cards`);
+  else console.log('All ticket cards already posted.');
 }
 
-module.exports = { postTicketCard, markTicketUpdated, runTicketCatchup, getOrCreateTicketsHub };
+// Archive all open forum threads in tickets-hub.
+// Runs once on startup — DB flag prevents repeat on future restarts.
+async function closeAllOpenTickets(guild) {
+  const config = getConfig();
+  if (config.ticketsCleaned) {
+    console.log('Tickets already cleaned, skipping.');
+    return;
+  }
+  const hub = await getOrCreateTicketsHub(guild);
+  if (!hub) return;
+  try {
+    const { threads: activeThreads } = await guild.channels.fetchActiveThreads();
+    let closed = 0;
+    for (const [, thread] of activeThreads) {
+      if (thread.parentId === hub.id && !thread.archived) {
+        try {
+          await thread.setArchived(true);
+          closed++;
+          await new Promise(r => setTimeout(r, 700));
+        } catch(e) {
+          console.error('Failed to archive ' + thread.name + ': ' + e.message);
+        }
+      }
+    }
+    console.log('Archived ' + closed + ' open ticket threads in tickets-hub.');
+    config.ticketsCleaned = true;
+    markDirty();
+  } catch(err) {
+    console.error('closeAllOpenTickets error:', err);
+  }
+}
+
+module.exports = { postTicketCard, markTicketUpdated, runTicketCatchup, getOrCreateTicketsHub, closeAllOpenTickets };
