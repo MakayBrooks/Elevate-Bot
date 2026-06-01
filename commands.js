@@ -16,11 +16,15 @@ module.exports = [
     .setName('calendar')
     .setDescription('Post this week\'s economic calendar (admin only)'),
 
-    new SlashCommandBuilder()
-      .setName('setup-leaderboard')
-      .setDescription('Admin: reset leaderboard channel — deletes bot messages and reposts in correct order'),
+  new SlashCommandBuilder()
+    .setName('setup-leaderboard')
+    .setDescription('Admin: reset leaderboard channel — deletes bot messages and reposts in correct order'),
 
-    new SlashCommandBuilder()
-      .setName('setup-start-here')
-      .setDescription('Admin: post the server onboarding embeds in the current channel'),
+  new SlashCommandBuilder()
+    .setName('setup-start-here')
+    .setDescription('Admin: post the server onboarding embeds in the current channel'),
+
+  new SlashCommandBuilder()
+    .setName('setup-rules')
+    .setDescription('Admin: post the server rules embeds in the current channel'),
 ].map(cmd => cmd.toJSON());
