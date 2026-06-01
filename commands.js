@@ -15,4 +15,8 @@ module.exports = [
   new SlashCommandBuilder()
     .setName('calendar')
     .setDescription('Post this week\'s economic calendar (admin only)'),
+
+    new SlashCommandBuilder()
+      .setName('setup-leaderboard')
+      .setDescription('Admin: reset leaderboard channel — deletes bot messages and reposts in correct order'),
 ].map(cmd => cmd.toJSON());
