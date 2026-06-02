@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-const LOCAL_PATH = path.join(__dirname, 'data', 'db.json');
+const LOCAL_PATH = process.env.DB_PATH || '/data/db.json';
 const GIST_FILENAME = 'elevate-bot-db.json';
 
 function ensureDir() {
@@ -60,13 +60,7 @@ function gistRequest(method, body = null) {
 let _store = null;
 let _saveQueue = Promise.resolve();
 
-// Safety flag: true only after loadAll() successfully finishes.
-// Prevents Gist saves if the bot starts up but fails to load real data,
-// which would otherwise overwrite a populated Gist with an empty store.
 let _loadComplete = false;
-
-// Tracks the user count we loaded at startup. If our current store
-// ever has fewer users than this, we refuse to save to Gist (data-loss guard).
 let _startupUserCount = 0;
 
 async function loadAll() {
@@ -102,7 +96,6 @@ async function loadAll() {
   console.log('✅ DB loaded from local, users: ' + _startupUserCount);
 
   if (_startupUserCount > 0 && process.env.GIST_ID && process.env.GITHUB_TOKEN) {
-    // Local had data but Gist didn't — push local data up to Gist now.
     saveToGist().catch(() => {});
   }
   return _store;
@@ -121,8 +114,6 @@ async function saveToGist() {
     return;
   }
 
-  // DATA-LOSS GUARD: never overwrite Gist with fewer users than we loaded at startup.
-  // This prevents a failed-load → empty store → Gist wipe scenario.
   const currentUserCount = Object.keys(_store.levels?.users || {}).length;
   if (_startupUserCount > 0 && currentUserCount < _startupUserCount) {
     console.error(
@@ -142,11 +133,9 @@ async function saveToGist() {
   }
 }
 
-// markDirty: save locally immediately, queue Gist save (debounced 500ms)
 let _gistTimer = null;
 function markDirty() {
   if (!_loadComplete) {
-    // loadAll() hasn't finished — do not persist anything yet.
     console.warn('⚠️  markDirty called before loadAll() completed — skipping save.');
     return;
   }
