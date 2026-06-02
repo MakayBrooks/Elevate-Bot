@@ -120,7 +120,6 @@ cron.schedule('30 9 * * 1-5', async () => {
       .setColor(0x2ECC71)
       .setTitle('ðºð¸ New York Session Open')
       .setDescription('> The **New York session** is now open (9:30 AM ET).\n> Stay disciplined, follow your plan, and manage your risk.')
-            )
       .addFields(
         { name: 'â° Session Hours', value: '9:30 AM â 4:00 PM ET', inline: true },
         { name: 'ð Key Markets', value: 'NQ, ES, SPY, Forex majors', inline: true },
