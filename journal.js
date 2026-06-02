@@ -14,7 +14,7 @@ function loadDB() {
 function saveDB(data) {
   const store = getStore();
   store.journal = data;
-  markDirty();
+  markDirty()
 }
 
 // In-memory state for multi-step trade form
@@ -51,7 +51,7 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
           `\u{1F4CE} **Attach chart screenshots directly after each entry.**`
         )
         .setThumbnail(member.user.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Trading Journal' })
+        .setFooter({ text: 'Elevate \u{1FABD} \u2022 Trading Journal' })
         .setTimestamp()
     ]
   });
@@ -70,6 +70,14 @@ async function getOrCreateUserThread(member, channel, db, userRecord) {
 // ââ Journal panel ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // ── Journal panel ──────────────────────────────────────────────────────────
 async function sendJournalPanel(channel) {
+    // Skip repost if panel already exists
+      const db = loadDB();
+        if (db._panelMessageId) {
+            try {
+                  const existing = await channel.messages.fetch(db._panelMessageId);
+                        if (existing) return existing;
+                            } catch {} // message deleted, fall through
+                              }
   const logEmbed = new EmbedBuilder()
     .setColor(0xF5F0E8)
     .setTitle('\u{1F4DA} Elevate Trading Journal')
@@ -83,7 +91,7 @@ async function sendJournalPanel(channel) {
       { name: '\u{1F3C6} Milestones', value: 'Earn roles & bonus XP', inline: true },
       { name: '\u{1F4CE} Charts', value: 'Attach screenshots in your thread', inline: true },
     )
-    .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Trading Journal' })
+    .setFooter({ text: 'Elevate \u{1FABD} \u2022 Trading Journal' })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
@@ -130,7 +138,7 @@ function buildTradeFormMessage(state = {}) {
     .setTitle('\u{1F4DD} Log a Trade')
     .setDescription('Select your trade details below, then click **Continue** to add notes.')
     .addFields({ name: 'Selections', value: lines.join('\n'), inline: false })
-    .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Only you can see this' });
+    .setFooter({ text: 'Elevate \u{1FABD} \u2022 Only you can see this' });
 
   const outcomeRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -291,7 +299,7 @@ function buildTradeEmbed(member, data, tradeNumber) {
       ...(data.notes ? [{ name: '\u{1F9E0} Post Trade Clarity', value: data.notes, inline: false }] : []),
       { name: '\u{1F4CE} Charts', value: 'Attach screenshots below \u2193', inline: false }
     )
-    .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Trading Journal' })
+    .setFooter({ text: 'Elevate \u{1FABD} \u2022 Trading Journal' })
     .setTimestamp();
 }
 
@@ -336,7 +344,7 @@ function buildJournalPageEmbed(trades, page, username) {
       { name: '\u274C Losses', value: `${losses}`, inline: true },
       { name: `\u{1F4C5} Recent Trades \u2014 Page ${page+1} of ${totalPages}`, value: tradeLines, inline: false },
     )
-    .setFooter({ text: `Elevate \u{1FAB5} \u2022 Only you can see this \u2022 Page ${page+1}/${totalPages}` })
+    .setFooter({ text: `Elevate \u{1FABD} \u2022 Only you can see this \u2022 Page ${page+1}/${totalPages}` })
     .setTimestamp();
 }
 
@@ -392,7 +400,7 @@ function buildTradeDetailEmbed(trade, tradeIdx) {
       { name: '\u{1F517} Confluences', value: confluenceTags, inline: false },
       ...(trade.notes ? [{ name: '\u{1F9E0} Post Trade Clarity', value: trade.notes, inline: false }] : []),
     )
-    .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Trade Detail' })
+    .setFooter({ text: 'Elevate \u{1FABD} \u2022 Trade Detail' })
     .setTimestamp();
   if (trade.screenshot) embed.setImage(trade.screenshot);
   return embed;
@@ -406,7 +414,7 @@ async function handleMyJournal(interaction, page = 0) {
       .setColor(0xF5F0E8)
       .setTitle('\u{1F4DA} Your Trading Journal')
       .setDescription('No trades logged yet. Click **\u{1F4DD} Log a Trade** to get started!')
-      .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Only you can see this' });
+      .setFooter({ text: 'Elevate \u{1FABD} \u2022 Only you can see this' });
     return { embeds: [empty], components: [], flags: MessageFlags.Ephemeral };
   }
   const trades = userData.trades;
@@ -592,7 +600,7 @@ async function handleJournalInteraction(interaction, client) {
             { name: '\u{1F4CE} Proof', value: screenshotNote, inline: false },
           )
           .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png' }))
-          .setFooter({ text: 'Elevate \u{1FAB5} \u2022 Approve or Deny' })
+          .setFooter({ text: 'Elevate \u{1FABD} \u2022 Approve or Deny' })
           .setTimestamp();
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`journal_earnings_approve_${interaction.user.id}`).setLabel('\u2705 Approve').setStyle(ButtonStyle.Success),
@@ -621,7 +629,7 @@ async function handleJournalInteraction(interaction, client) {
       await checkAchievements(targetId, targetMember?.user.username || 'User', computeStats(db[targetId].trades || [], db[targetId].verifiedWeeks), interaction.guild, addXP);
       await addXP(targetId, targetMember?.user.username || 'User', 200, interaction.guild);
       await interaction.editReply({ content: `\u2705 Approved! +200 XP to ${targetMember || targetId}.`, components: [] });
-      try { await targetMember?.send('\u2705 Your weekly earnings were **approved**! +200 XP added. \u{1FAB5}'); } catch {}
+      try { await targetMember?.send('\u2705 Your weekly earnings were **approved**! +200 XP added. \u{1FABD}'); } catch {}
     } catch (err) {
       if (err.code === 10062 || err.rawError?.message?.includes('already been acknowledged')) return;
       await interaction.editReply({ content: '\u274C Error.', components: [] }).catch(() => {});
