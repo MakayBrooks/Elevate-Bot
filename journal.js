@@ -113,7 +113,6 @@ async function sendJournalPanel(channel) {
 
   const msg = await channel.send({ embeds: [logEmbed], components: [row] });
   await msg.pin().catch(() => {});
-  const db = loadDB();
   db._panelMessageId = msg.id;
   saveDB(db);
   return msg;
