@@ -31,7 +31,7 @@ GatewayIntentBits.MessageContent,
 const xpCooldowns = new Map();
 
 client.once('ready', async () => {
-console.log(`✅ Elevate Bot online as ${client.user.tag}`);
+console.log('✅ Elevate Bot online as ' + client.user.tag);
 
 await loadAll();
 console.log('✅ Database loaded.');
@@ -131,9 +131,9 @@ try {
 const channel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
 if (!channel) return;
 const joinTimestamp = Math.floor(member.joinedTimestamp / 1000);
-await channel.send(`👋 Welcome to the community, ${member} 🪹
-🤝 We are now **${member.guild.memberCount}** members!
-📅 Joined: <t:${joinTimestamp}:R>`);
+await channel.send('👋 Welcome to the community, ' + member + ' 🪹
+🤝 We are now **' + member.guild.memberCount + '** members!
+📅 Joined: <t:' + joinTimestamp + ':R>');
 const cardBuffer = await generateWelcomeCard(member);
 await channel.send({ files: [new AttachmentBuilder(cardBuffer, { name: 'welcome.png' })] });
 } catch (err) { console.error('❌ Welcome error:', err); }
@@ -190,7 +190,7 @@ const user = getUser(db, target.id, target.username);
 user.points += amount;
 saveLevelsDB(db);
 await updateLeaderboard(guild);
-await interaction.editReply(`✅ Added **${amount} pts** to ${target.username}. New balance: **${user.points} pts**`);
+await interaction.editReply('✅ Added **' + amount + ' pts** to ' + target.username + '. New balance: **' + user.points + ' pts**');
 }
 
 if (interaction.commandName === 'calendar') {
