@@ -110,8 +110,7 @@ cron.schedule('30 9 * * 1-5', async () => {
     const embed = new EmbedBuilder()
       .setColor(0x2ECC71)
       .setTitle('🇺🇸 New York Session Open')
-      .setDescription('> The **New York session** is now open (9:30 AM ET).
-> Stay disciplined, follow your plan, and manage your risk.')
+      .setDescription('> The **New York session** is now open (9:30 AM ET).\n> Stay disciplined, follow your plan, and manage your risk.')
       .addFields(
         { name: '⏰ Session Hours', value: '9:30 AM → 4:00 PM ET', inline: true },
         { name: '📈 Key Markets', value: 'NQ, ES, SPY, Forex majors', inline: true },
@@ -131,9 +130,7 @@ try {
 const channel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
 if (!channel) return;
 const joinTimestamp = Math.floor(member.joinedTimestamp / 1000);
-await channel.send('👋 Welcome to the community, ' + member + ' 🪹
-🤝 We are now **' + member.guild.memberCount + '** members!
-📅 Joined: <t:' + joinTimestamp + ':R>');
+await channel.send('👋 Welcome to the community, ' + member + ' 🪹\n🤝 We are now **' + member.guild.memberCount + '** members!\n📅 Joined: <t:' + joinTimestamp + ':R>');
 const cardBuffer = await generateWelcomeCard(member);
 await channel.send({ files: [new AttachmentBuilder(cardBuffer, { name: 'welcome.png' })] });
 } catch (err) { console.error('❌ Welcome error:', err); }
