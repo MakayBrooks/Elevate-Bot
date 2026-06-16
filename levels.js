@@ -6,7 +6,7 @@ const { getStore, markDirty } = require('./db');
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
-function loadDB() {
+function loadDB() 
   const store = getStore();
   if (!store.levels) store.levels = {};
   if (!store.levels.users) store.levels.users = {};
