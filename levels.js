@@ -1,4 +1,4 @@
-const {
+const { 
   EmbedBuilder, ButtonBuilder, ButtonStyle,
   ActionRowBuilder, StringSelectMenuBuilder, AttachmentBuilder,
 } = require('discord.js');
