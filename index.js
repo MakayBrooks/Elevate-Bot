@@ -86,7 +86,7 @@ client.once('ready', async () => {
       const shopChannel = guild.channels.cache.get(process.env.SHOP_CHANNEL_ID);
       if (shopChannel) {
         const pinned     = await shopChannel.messages.fetchPinned();
-        const shopExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🏪 Elevate Shop');
+        const shopExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🛒 Elevate Shop');
         if (!shopExists) { await postShopPanel(shopChannel); console.log('✅ Shop panel posted.'); }
         else console.log('📌 Shop panel exists.');
       }
