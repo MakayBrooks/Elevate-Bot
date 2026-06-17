@@ -383,22 +383,24 @@ const SHOP_CATS = {
 const ITEMS_PER_PAGE = 3;
 
 function buildShopMessage(category, page) {
-  const cat       = SHOP_CATS[category] || SHOP_CATS.roles;
-  const items     = cat.items;
+  const catKeys = ['roles', 'badges', 'soon'];
+  const catIdx = Math.max(0, catKeys.indexOf(category));
+  const cat = SHOP_CATS[category] || SHOP_CATS.roles;
+  const items = cat.items;
   const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
-  const safePage   = Math.max(0, Math.min(page, totalPages - 1));
-  const pageItems  = items.slice(safePage * ITEMS_PER_PAGE, (safePage + 1) * ITEMS_PER_PAGE);
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const pageItems = items.slice(safePage * ITEMS_PER_PAGE, (safePage + 1) * ITEMS_PER_PAGE);
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🏪 Elevate Shop')
+    .setTitle('🛒 Elevate Shop')
     .setDescription(`> ${cat.emoji} **${cat.label}**\n> ${cat.desc}\n​`);
 
   if (category === 'soon') {
     embed.addFields(
-      { name: '🔒 Mystery Item',    value: '> 👀 Something is brewing...\n> *Stay active to unlock!*',       inline: true },
-      { name: '🔒 ???',             value: '> New drops coming soon.\n> *Keep leveling up 🪽*',               inline: true },
-      { name: '🔒 More to come...',  value: '> Earn points now so you\'re\n> ready when they drop! 💰',       inline: true },
+      { name: '🔒 Mystery Item', value: '> 👀 Something is brewing...\n> *Stay active to unlock!*', inline: false },
+      { name: '🔒 ???', value: '> New drops coming soon.\n> *Keep leveling up 🪽*', inline: false },
+      { name: '🔒 More to come...', value: '> Earn points now so you\'re\n> ready when they drop! 💰', inline: false },
     );
   } else {
     for (const item of pageItems) {
@@ -409,45 +411,46 @@ function buildShopMessage(category, page) {
           `> 🪽 **Price:** ${item.price.toLocaleString()} pts`,
           `> *${item.description}*`,
         ].join('\n'),
-        inline: true,
+        inline: false,
       });
     }
   }
 
   embed
-    .setFooter({ text: `Elevate 🪽 • Page ${safePage + 1} of ${totalPages}` })
+    .setFooter({ text: `Elevate 🪽 • ${cat.label}` })
     .setTimestamp();
 
   const components = [];
 
-  // Row 1: Buy buttons (skip for Coming Soon)
+  // One buy button per item row — visually corresponds 1:1 with each item above
   if (category !== 'soon' && pageItems.length > 0) {
-    const buyRow = new ActionRowBuilder();
     for (const item of pageItems) {
-      buyRow.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`shop_buy_${item.id}`)
-          .setLabel(`Buy (${fmtPts(item.price)} 🪽)`)
-          .setStyle(ButtonStyle.Primary),
+      const itemLabel = item.name.split(' ').slice(1).join(' ');
+      components.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`shop_buy_${item.id}`)
+            .setLabel(`Buy ${itemLabel} — ${fmtPts(item.price)} pts 🪽`)
+            .setStyle(ButtonStyle.Primary),
+        )
       );
     }
-    components.push(buyRow);
   }
 
-  // Row 2: Pagination navigation
-  const prevPage = Math.max(0, safePage - 1);
-  const nextPage = Math.min(totalPages - 1, safePage + 1);
+  // Category navigation arrows (replaces dropdown)
+  const prevCat = catKeys[Math.max(0, catIdx - 1)];
+  const nextCat = catKeys[Math.min(catKeys.length - 1, catIdx + 1)];
   components.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`shop_p_${category}_0_f`).setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
-      new ButtonBuilder().setCustomId(`shop_p_${category}_${prevPage}_p`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
-      new ButtonBuilder().setCustomId('shop_nav_page').setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
-      new ButtonBuilder().setCustomId(`shop_p_${category}_${nextPage}_n`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
-      new ButtonBuilder().setCustomId(`shop_p_${category}_${totalPages - 1}_l`).setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
+      new ButtonBuilder().setCustomId(`shop_p_${catKeys[0]}_0_f`).setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(catIdx === 0),
+      new ButtonBuilder().setCustomId(`shop_p_${prevCat}_0_p`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(catIdx === 0),
+      new ButtonBuilder().setCustomId('shop_nav_page').setLabel(`${cat.emoji} ${cat.label}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId(`shop_p_${nextCat}_0_n`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(catIdx >= catKeys.length - 1),
+      new ButtonBuilder().setCustomId(`shop_p_${catKeys[catKeys.length - 1]}_0_l`).setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(catIdx >= catKeys.length - 1),
     )
   );
 
-  // Row 3: Utility buttons
+  // Utility buttons
   const utilRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('shop_check_balance').setLabel('💰 My Balance').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('shop_slot1').setLabel('🎖️ Equip Badge').setStyle(ButtonStyle.Secondary),
@@ -463,23 +466,8 @@ function buildShopMessage(category, page) {
   }
   components.push(utilRow);
 
-  // Row 4: Category select
-  components.push(
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('shop_category')
-        .setPlaceholder(`${cat.emoji}  ${cat.label}  ▾`)
-        .addOptions([
-          { label: '🎭  Member Roles',  description: 'Exclusive Discord roles',       value: 'roles'  },
-          { label: '🏅  XP Badges',     description: 'Boost your XP earnings',        value: 'badges' },
-          { label: '🔒  Coming Soon',   description: 'New items dropping soon...',    value: 'soon'   },
-        ]),
-    )
-  );
-
   return { embed, components };
 }
-
 async function postShopPanel(channel) {
   const { embed, components } = buildShopMessage('roles', 0);
   const msg = await channel.send({ embeds: [embed], components });
