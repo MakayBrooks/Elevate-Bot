@@ -68,17 +68,24 @@ client.once('ready', async () => {
 
   // ── Leaderboard + rank panel ───────────────────────────────────────────────
   try {
-    if (guild) {
-      const lbChannel = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
-      if (lbChannel) {
-        await updateLeaderboard(guild);
-        const pinned      = await lbChannel.messages.fetchPinned();
-        const panelExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🏆 Rank & Levels');
-        if (!panelExists) { await postLevelsPanel(lbChannel); console.log('✅ Rank panel posted.'); }
-        else console.log('📌 Rank panel exists.');
-      }
+  if (guild) {
+    const lbChannel = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
+    if (lbChannel) await updateLeaderboard(guild);
+  }
+} catch (err) { console.error('❌ Leaderboard error:', err); }
+
+// Rank panel — your-rank channel
+try {
+  if (guild) {
+    const rankChannel = guild.channels.cache.get(process.env.RANK_CHANNEL_ID);
+    if (rankChannel) {
+      const pinned = await rankChannel.messages.fetchPinned();
+      const panelExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🏆 Rank & Levels');
+      if (!panelExists) { await postLevelsPanel(rankChannel); console.log('✅ Rank panel posted.'); }
+      else console.log('📌 Rank panel exists.');
     }
-  } catch (err) { console.error('❌ Leaderboard error:', err); }
+  }
+} catch (err) { console.error('❌ Rank panel error:', err); }
 
   // ── Shop panel ────────────────────────────────────────────────────────────
   try {
@@ -260,9 +267,19 @@ client.on('interactionCreate', async (interaction) => {
         delete store.levels.levelsPanelMessageId;
       }
       markDirty();
-      await updateLeaderboard(guild);
-      await postLevelsPanel(lbChannel);
-      await interaction.editReply('✅ Leaderboard channel reset! Order: 🏆 Leaderboard (top) → 📊 Rank panel (below).');
+      aw// 1. Repost leaderboard
+    await updateLeaderboard(guild);
+    // 2. Repost rank panel to rank channel
+    const rankChannel = guild.channels.cache.get(process.env.RANK_CHANNEL_ID);
+    if (rankChannel) {
+      const rankFetched = await rankChannel.messages.fetch({ limit: 100 });
+      for (const [, msg] of rankFetched.filter(m => m.author.id === client.user.id)) {
+        if (msg.pinned) await msg.unpin().catch(() => {});
+        await msg.delete().catch(() => {});
+      }
+      await postLevelsPanel(rankChannel);
+    }
+    await interaction.editReply('✅ Done! Leaderboard stays in leaderboard channel; rank panel reposted in your-rank channel.');
     } catch (err) {
       console.error('❌ setup-leaderboard error:', err);
       await interaction.editReply('❌ Error: ' + err.message);
