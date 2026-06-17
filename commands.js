@@ -27,4 +27,9 @@ module.exports = [
   new SlashCommandBuilder()
     .setName('setup-rules')
     .setDescription('Admin: post the server rules embeds in the current channel'),
+
+new SlashCommandBuilder()
+  .setName('setup-shop')
+  .setDescription('Admin: reset shop channel — deletes bot messages and reposts shop panel'),
+
 ].map(cmd => cmd.toJSON());
