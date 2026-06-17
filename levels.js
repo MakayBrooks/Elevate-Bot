@@ -439,11 +439,11 @@ function buildShopMessage(category, page) {
   const nextPage = Math.min(totalPages - 1, safePage + 1);
   components.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`shop_p_${category}_0`).setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
-      new ButtonBuilder().setCustomId(`shop_p_${category}_${prevPage}`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+      new ButtonBuilder().setCustomId(`shop_p_${category}_0_f`).setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+      new ButtonBuilder().setCustomId(`shop_p_${category}_${prevPage}_p`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
       new ButtonBuilder().setCustomId('shop_nav_page').setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
-      new ButtonBuilder().setCustomId(`shop_p_${category}_${nextPage}`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
-      new ButtonBuilder().setCustomId(`shop_p_${category}_${totalPages - 1}`).setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
+      new ButtonBuilder().setCustomId(`shop_p_${category}_${nextPage}_n`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
+      new ButtonBuilder().setCustomId(`shop_p_${category}_${totalPages - 1}_l`).setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
     )
   );
 
