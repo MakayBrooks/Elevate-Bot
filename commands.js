@@ -39,6 +39,10 @@ new SlashCommandBuilder()
     .addUserOption(opt => opt.setName('user').setDescription('User to fix').setRequired(true)),
 
 
+  
+  new SlashCommandBuilder()
+    .setName('fixroles-all')
+    .setDescription('[Admin] Assign correct shop roles to ALL users who bought one in the shop'),
   new SlashCommandBuilder()
     .setName('fixrole')
     .setDescription('[Admin] Re-assign the correct shop role based on a user\'s inventory')
