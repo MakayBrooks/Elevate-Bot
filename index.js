@@ -323,17 +323,17 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.commandName === 'setup-rules') {
     await postRulesPanel(interaction); return;
   }
-}
 
-// /fixrole
-if (interaction.commandName === 'fixrole') {
-await interaction.deferReply({ ephemeral: true });
-if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Admins only.');
-const target = interaction.options.getUser('user');
-const result = await fixUserRole(target.id, guild);
-if (!result.ok) return interaction.editReply('Error: ' + result.msg);
-await interaction.editReply('Role fixed: ' + result.role.name + ' assigned to ' + result.member.displayName);
-return;
+  // /fixrole
+  if (interaction.commandName === 'fixrole') {
+    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Admins only.');
+    const target = interaction.options.getUser('user');
+    const result = await fixUserRole(target.id, guild);
+    if (!result.ok) return interaction.editReply('Error: ' + result.msg);
+    await interaction.editReply('Role fixed: ' + result.role.name + ' assigned to ' + result.member.displayName);
+    return;
+  }
 });
 
 client.login(process.env.BOT_TOKEN);
