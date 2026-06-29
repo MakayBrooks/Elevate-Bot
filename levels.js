@@ -588,6 +588,7 @@ async function handleShopBuy(interaction, guild) {
 
   if (role) {
     try {
+await guild.roles.fetch();
       const member = await guild.members.fetch(interaction.user.id);
       for (const r of SHOP_ROLES) {
         const dr = guild.roles.cache.find(gr => gr.name === r.roleName);
@@ -756,6 +757,37 @@ function startPassiveXP(client) {
   }, 5 * 60 * 1000);
 }
 
+// ─── Fix role assignment ──────────────────────────────────────────────────────
+
+async function fixUserRole(userId, guild) {
+const db = loadDB();
+const user = db.users?.[userId];
+if (!user) return { ok: false, msg: 'User not found in database.' };
+
+await guild.roles.fetch();
+const member = await guild.members.fetch(userId).catch(() => null);
+if (!member) return { ok: false, msg: 'Member not found in server.' };
+
+// Strip all shop roles first
+for (const r of SHOP_ROLES) {
+const dr = guild.roles.cache.find(gr => gr.name === r.roleName);
+if (dr && member.roles.cache.has(dr.id)) await member.roles.remove(dr).catch(() => {});
+}
+
+// Find highest-tier owned role
+const highest = SHOP_ROLES
+.filter(r => (user.inventory || []).includes(r.id))
+.sort((a, b) => b.tier - a.tier)[0];
+
+if (!highest) return { ok: false, msg: 'No shop roles found in this user\'s inventory.' };
+
+const discordRole = guild.roles.cache.find(gr => gr.name === highest.roleName);
+if (!discordRole) return { ok: false, msg: `Discord role "${highest.roleName}" not found — check the role name matches exactly.` };
+
+await member.roles.add(discordRole);
+return { ok: true, role: highest, member };
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -768,4 +800,5 @@ module.exports = {
   handleShopNav,
   handleXPChart,
   handleVCJoin, handleVCLeave, startPassiveXP,
+fixUserRole,
 };
