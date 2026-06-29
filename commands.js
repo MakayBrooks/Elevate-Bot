@@ -38,4 +38,10 @@ new SlashCommandBuilder()
     .setDescription('[Admin] Manually assign the correct shop role to a user based on their inventory')
     .addUserOption(opt => opt.setName('user').setDescription('User to fix').setRequired(true)),
 
+
+  new SlashCommandBuilder()
+    .setName('fixrole')
+    .setDescription('[Admin] Re-assign the correct shop role based on a user\'s inventory')
+    .addUserOption(opt => opt.setName('user').setDescription('User to fix').setRequired(true)),
+
 ].map(cmd => cmd.toJSON());
