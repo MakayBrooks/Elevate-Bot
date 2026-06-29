@@ -324,6 +324,24 @@ client.on('interactionCreate', async (interaction) => {
     await postRulesPanel(interaction); return;
   }
 
+
+  // /fixroles-all
+  if (interaction.commandName === 'fixroles-all') {
+    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Admins only.');
+    const dbData = loadLevelsDB();
+    const userEntries = Object.entries(dbData.users || {});
+    let fixed = 0, skipped = 0, errList = [];
+    for (const [userId, u] of userEntries) {
+      if (!(u.inventory || []).some(id => id.startsWith('role_'))) { skipped++; continue; }
+      const result = await fixUserRole(userId, guild).catch(e => ({ ok: false, msg: e.message }));
+      if (result.ok) fixed++;
+      else errList.push(userId.slice(0,8) + '…: ' + result.msg);
+    }
+    const errMsg = errList.length ? '\n\nErrors:\n' + errList.slice(0,5).join('\n') : '';
+    return interaction.editReply(`✅ Done! Fixed: **${fixed}**, Skipped: **${skipped}**, Errors: **${errList.length}**${errMsg}`);
+  }
+
   // /fixrole
   if (interaction.commandName === 'fixrole') {
     await interaction.deferReply({ ephemeral: true });
