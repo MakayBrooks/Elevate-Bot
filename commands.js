@@ -32,4 +32,10 @@ new SlashCommandBuilder()
   .setName('setup-shop')
   .setDescription('Admin: reset shop channel — deletes bot messages and reposts shop panel'),
 
+
+  new SlashCommandBuilder()
+    .setName('fixrole')
+    .setDescription('[Admin] Manually assign the correct shop role to a user based on their inventory')
+    .addUserOption(opt => opt.setName('user').setDescription('User to fix').setRequired(true)),
+
 ].map(cmd => cmd.toJSON());
