@@ -14,7 +14,7 @@ module.exports = [
 
   new SlashCommandBuilder()
     .setName('calendar')
-    .setDescription('Post this week\'s economic calendar (admin only)'),
+    .setDescription("Post this week's economic calendar (admin only)"),
 
   new SlashCommandBuilder()
     .setName('setup-leaderboard')
@@ -28,24 +28,21 @@ module.exports = [
     .setName('setup-rules')
     .setDescription('Admin: post the server rules embeds in the current channel'),
 
-new SlashCommandBuilder()
-  .setName('setup-shop')
-  .setDescription('Admin: reset shop channel — deletes bot messages and reposts shop panel'),
+  new SlashCommandBuilder()
+    .setName('setup-shop')
+    .setDescription('Admin: reset shop channel — deletes bot messages and reposts shop panel'),
 
+  new SlashCommandBuilder()
+    .setName('setup-trading-lb')
+    .setDescription('Admin: reset and repost the trading leaderboard'),
 
   new SlashCommandBuilder()
     .setName('fixrole')
     .setDescription('[Admin] Manually assign the correct shop role to a user based on their inventory')
     .addUserOption(opt => opt.setName('user').setDescription('User to fix').setRequired(true)),
 
-
-  
   new SlashCommandBuilder()
     .setName('fixroles-all')
     .setDescription('[Admin] Assign correct shop roles to ALL users who bought one in the shop'),
-  new SlashCommandBuilder()
-    .setName('fixrole')
-    .setDescription('[Admin] Re-assign the correct shop role based on a user\'s inventory')
-    .addUserOption(opt => opt.setName('user').setDescription('User to fix').setRequired(true)),
 
 ].map(cmd => cmd.toJSON());
