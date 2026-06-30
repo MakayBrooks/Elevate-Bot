@@ -12,12 +12,13 @@ const {
   handleSlot1, handleSlot2, handleEquipSelect, handleShopBuy,
   handleShopNav, handleXPChart,
   handleVCJoin, handleVCLeave, startPassiveXP,
-fixUserRole,
+  fixUserRole,
   getUser, loadDB: loadLevelsDB, saveDB: saveLevelsDB,
 } = require('./levels');
 const commands = require('./commands');
 const { postStartHerePanel } = require('./startHere');
 const { postRulesPanel } = require('./setupRules');
+const { postTradingLeaderboard, refreshTradingLeaderboard: handleTradingLbRefresh, getOrCreateTradingLbChannel } = require('./trading-leaderboard');
 
 const client = new Client({
   intents: [
@@ -33,20 +34,20 @@ const client = new Client({
 const xpCooldowns = new Map();
 
 client.once('ready', async () => {
-  console.log('✅ Elevate Bot online as ' + client.user.tag);
+  console.log('\u2705 Elevate Bot online as ' + client.user.tag);
 
   await loadAll();
-  console.log('✅ Database loaded.');
+  console.log('\u2705 Database loaded.');
 
   const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('✅ Slash commands registered.');
-  } catch (err) { console.error('❌ Commands error:', err); }
+    console.log('\u2705 Slash commands registered.');
+  } catch (err) { console.error('\u274C Commands error:', err); }
 
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
 
-  // ── Journal panel ──────────────────────────────────────────────────────────
+  // \u2500\u2500 Journal panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   try {
     if (guild) {
       const journalChannel = guild.channels.cache.get(process.env.JOURNAL_CHANNEL_ID);
@@ -61,135 +62,157 @@ client.once('ready', async () => {
           const pinned = await journalChannel.messages.fetchPinned().catch(() => new Map());
           exists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title?.includes('Trading Journal'));
         }
-        if (!exists) { await sendJournalPanel(journalChannel); console.log('✅ Journal panel posted.'); }
-        else console.log('📌 Journal panel exists.');
+        if (!exists) { await sendJournalPanel(journalChannel); console.log('\u2705 Journal panel posted.'); }
+        else console.log('\u{1F4CC} Journal panel exists.');
       }
     }
-  } catch (err) { console.error('❌ Journal panel error:', err); }
+  } catch (err) { console.error('\u274C Journal panel error:', err); }
 
-  // ── Leaderboard + rank panel ───────────────────────────────────────────────
+  // \u2500\u2500 Leaderboard + rank panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   try {
-  if (guild) {
-    const lbChannel = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
-    if (lbChannel) await updateLeaderboard(guild);
-  }
-} catch (err) { console.error('❌ Leaderboard error:', err); }
-
-// Rank panel — your-rank channel
-try {
-  if (guild) {
-    const rankChannel = guild.channels.cache.get(process.env.RANK_CHANNEL_ID);
-    if (rankChannel) {
-      const pinned = await rankChannel.messages.fetchPinned();
-      const panelExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🏆 Rank & Levels');
-      if (!panelExists) { await postLevelsPanel(rankChannel); console.log('✅ Rank panel posted.'); }
-      else console.log('📌 Rank panel exists.');
+    if (guild) {
+      const lbChannel = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
+      if (lbChannel) await updateLeaderboard(guild);
     }
-  }
-} catch (err) { console.error('❌ Rank panel error:', err); }
+  } catch (err) { console.error('\u274C Leaderboard error:', err); }
 
-  // ── Shop panel ────────────────────────────────────────────────────────────
+  // Rank panel \u2014 your-rank channel
+  try {
+    if (guild) {
+      const rankChannel = guild.channels.cache.get(process.env.RANK_CHANNEL_ID);
+      if (rankChannel) {
+        const pinned = await rankChannel.messages.fetchPinned();
+        const panelExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '\u{1F3C6} Rank & Levels');
+        if (!panelExists) { await postLevelsPanel(rankChannel); console.log('\u2705 Rank panel posted.'); }
+        else console.log('\u{1F4CC} Rank panel exists.');
+      }
+    }
+  } catch (err) { console.error('\u274C Rank panel error:', err); }
+
+  // \u2500\u2500 Shop panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   try {
     if (guild) {
       const shopChannel = guild.channels.cache.get(process.env.SHOP_CHANNEL_ID);
       if (shopChannel) {
-        const pinned     = await shopChannel.messages.fetchPinned();
-        const shopExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '🛒 Elevate Shop');
-        if (!shopExists) { await postShopPanel(shopChannel); console.log('✅ Shop panel posted.'); }
-        else console.log('📌 Shop panel exists.');
+        const pinned = await shopChannel.messages.fetchPinned();
+        const shopExists = pinned.some(m => m.author.id === client.user.id && m.embeds?.[0]?.title === '\u{1F6D2} Elevate Shop');
+        if (!shopExists) { await postShopPanel(shopChannel); console.log('\u2705 Shop panel posted.'); }
+        else console.log('\u{1F4CC} Shop panel exists.');
       }
     }
-  } catch (err) { console.error('❌ Shop panel error:', err); }
+  } catch (err) { console.error('\u274C Shop panel error:', err); }
+
+  // \u2500\u2500 Trading Leaderboard \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  try {
+    if (guild) {
+      const lbCh = await getOrCreateTradingLbChannel(guild);
+      if (lbCh) { await postTradingLeaderboard(lbCh); console.log('\u2705 Trading leaderboard posted.'); }
+    }
+  } catch (err) { console.error('\u274C Trading leaderboard error:', err); }
 
   startPassiveXP(client);
 
-  // ── Scheduled tasks ───────────────────────────────────────────────────────
+  // \u2500\u2500 Scheduled tasks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   cron.schedule('0 19 * * 0', async () => {
     if (guild) await postWeeklyCalendar(guild, client);
   }, { timezone: 'America/New_York' });
-  console.log('📅 Weekly calendar scheduled: Sunday 7PM ET');
+  console.log('\u{1F4C5} Weekly calendar scheduled: Sunday 7PM ET');
 
   cron.schedule('30 9 * * 1-5', async () => {
     try {
-      const guild   = client.guilds.cache.get(process.env.GUILD_ID);
+      const guild = client.guilds.cache.get(process.env.GUILD_ID);
       if (!guild) return;
       const channel = guild.channels.cache.get(process.env.TRADING_CHANNEL_ID);
-      if (!channel) { console.warn('⚠️ NY session cron: TRADING_CHANNEL_ID not found'); return; }
+      if (!channel) { console.warn('\u26A0\uFE0F NY session cron: TRADING_CHANNEL_ID not found'); return; }
       const { EmbedBuilder } = require('discord.js');
       const embed = new EmbedBuilder()
         .setColor(0x2ECC71)
-        .setTitle('🇺🇸 New York Session Open')
+        .setTitle('\u{1F1FA}\u{1F1F8} New York Session Open')
         .setDescription('> The **New York session** is now open (9:30 AM ET).\n> Stay disciplined, follow your plan, and manage your risk.')
         .addFields(
-          { name: '⏰ Session Hours', value: '9:30 AM → 4:00 PM ET', inline: true },
-          { name: '📈 Key Markets',   value: 'NQ, ES, SPY, Forex majors', inline: true },
+          { name: '\u23F0 Session Hours', value: '9:30 AM \u2192 4:00 PM ET', inline: true },
+          { name: '\u{1F4C8} Key Markets', value: 'NQ, ES, SPY, Forex majors', inline: true },
         )
-        .setFooter({ text: 'Elevate 🪽 • Trading Room' })
+        .setFooter({ text: 'Elevate \u{1FABD} \u2022 Trading Room' })
         .setTimestamp();
       await channel.send({ embeds: [embed] });
-      console.log('✅ NY session open posted');
-    } catch (err) { console.error('❌ NY session cron error:', err); }
+      console.log('\u2705 NY session open posted');
+    } catch (err) { console.error('\u274C NY session cron error:', err); }
   }, { timezone: 'America/New_York' });
-  console.log('⏰ NY session open scheduled: weekdays 9:30 AM ET');
+  console.log('\u23F0 NY session open scheduled: weekdays 9:30 AM ET');
 });
 
-// ── Member events ──────────────────────────────────────────────────────────────
+// \u2500\u2500 Member events \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 client.on('guildMemberAdd', async (member) => {
   try {
     const channel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID);
     if (!channel) return;
     const joinTimestamp = Math.floor(member.joinedTimestamp / 1000);
-    await channel.send(`👋 Welcome to the community, ${member} 🪽\n🤝 We are now **${member.guild.memberCount}** members!\n📅 Joined: <t:${joinTimestamp}:R>`);
+    await channel.send(`\u{1F44B} Welcome to the community, ${member} \u{1FABD}\n\u{1F91D} We are now **${member.guild.memberCount}** members!\n\u{1F4C5} Joined: <t:${joinTimestamp}:R>`);
     const cardBuffer = await generateWelcomeCard(member);
     await channel.send({ files: [new AttachmentBuilder(cardBuffer, { name: 'welcome.png' })] });
-  } catch (err) { console.error('❌ Welcome error:', err); }
+  } catch (err) { console.error('\u274C Welcome error:', err); }
 });
 
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   if (!oldMember.premiumSince && newMember.premiumSince) await handleBoost(newMember, newMember.guild);
 });
 
-// ── Message XP ────────────────────────────────────────────────────────────────
+// \u2500\u2500 Message XP \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
-  const now  = Date.now();
+  const now = Date.now();
   const last = xpCooldowns.get(message.author.id) || 0;
   if (now - last < 60000) return;
   xpCooldowns.set(message.author.id, now);
   await addXP(message.author.id, message.author.username, 5, message.guild);
 });
 
-// ── Voice XP ──────────────────────────────────────────────────────────────────
+// \u2500\u2500 Voice XP \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
-  const guild  = newState.guild || oldState.guild;
+  const guild = newState.guild || oldState.guild;
   const member = newState.member || oldState.member;
   if (!member || member.user.bot) return;
-  if (!oldState.channelId && newState.channelId)  handleVCJoin(member);
+  if (!oldState.channelId && newState.channelId) handleVCJoin(member);
   else if (oldState.channelId && !newState.channelId) await handleVCLeave(member, guild);
 });
 
-// ── Interactions ──────────────────────────────────────────────────────────────
+// \u2500\u2500 Interactions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 client.on('interactionCreate', async (interaction) => {
   const guild = interaction.guild;
 
-  // ── Journal ────────────────────────────────────────────────────────────────
+  // \u2500\u2500 Journal \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   if (
-    (interaction.isButton()           && interaction.customId.startsWith('journal_')) ||
+    (interaction.isButton() && interaction.customId.startsWith('journal_')) ||
     (interaction.isStringSelectMenu() && interaction.customId.startsWith('journal_')) ||
-    (interaction.isModalSubmit()      && interaction.customId.startsWith('journal_')) ||
+    (interaction.isModalSubmit() && interaction.customId.startsWith('journal_')) ||
     (interaction.isChatInputCommand() && interaction.commandName === 'journal')
-  ) { await handleJournalInteraction(interaction, client); return; }
+  ) {
+    await handleJournalInteraction(interaction, client);
+    // Refresh trading leaderboard in background after any journal action
+    if (guild) {
+      getOrCreateTradingLbChannel(guild)
+        .then(ch => { if (ch) postTradingLeaderboard(ch).catch(() => {}); })
+        .catch(() => {});
+    }
+    return;
+  }
 
-  // ── Rank ───────────────────────────────────────────────────────────────────
+  // \u2500\u2500 Trading leaderboard refresh button \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  if (interaction.isButton() && interaction.customId === 'trading_lb_refresh') {
+    await handleTradingLbRefresh(interaction); return;
+  }
+
+  // \u2500\u2500 Rank \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   if (interaction.isButton() && interaction.customId === 'levels_check_rank') {
     await handleCheckRank(interaction, guild); return;
   }
 
-  // ── XP Chart ──────────────────────────────────────────────────────────────
+  // \u2500\u2500 XP Chart \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   if (interaction.isButton() && interaction.customId === 'levels_view_xpchart') {
     await handleXPChart(interaction, '1w', false); return;
   }
@@ -198,26 +221,26 @@ client.on('interactionCreate', async (interaction) => {
     await handleXPChart(interaction, tf, true); return;
   }
 
-  // ── Shop navigation ────────────────────────────────────────────────────────
+  // \u2500\u2500 Shop navigation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   if (interaction.isButton() && interaction.customId.startsWith('shop_p_')) {
-    const parts    = interaction.customId.split('_'); // ['shop','p','roles','0']
+    const parts = interaction.customId.split('_');
     const category = parts[2];
-    const page     = parseInt(parts[3]) || 0;
+    const page = parseInt(parts[3]) || 0;
     await handleShopNav(interaction, category, page); return;
   }
   if (interaction.isStringSelectMenu() && interaction.customId === 'shop_category') {
     await handleShopNav(interaction, interaction.values[0], 0); return;
   }
 
-  // ── Shop utility ───────────────────────────────────────────────────────────
-  if (interaction.isButton() && interaction.customId === 'shop_check_balance')   { await handleCheckBalance(interaction);       return; }
-  if (interaction.isButton() && interaction.customId === 'shop_slot1')            { await handleSlot1(interaction);              return; }
-  if (interaction.isButton() && interaction.customId === 'shop_slot2')            { await handleSlot2(interaction);              return; }
+  // \u2500\u2500 Shop utility \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  if (interaction.isButton() && interaction.customId === 'shop_check_balance') { await handleCheckBalance(interaction); return; }
+  if (interaction.isButton() && interaction.customId === 'shop_slot1') { await handleSlot1(interaction); return; }
+  if (interaction.isButton() && interaction.customId === 'shop_slot2') { await handleSlot2(interaction); return; }
   if (interaction.isStringSelectMenu() && interaction.customId === 'shop_equip_earned') { await handleEquipSelect(interaction); return; }
   if (interaction.isStringSelectMenu() && interaction.customId === 'shop_equip_bought') { await handleEquipSelect(interaction); return; }
-  if (interaction.isButton() && interaction.customId.startsWith('shop_buy_'))     { await handleShopBuy(interaction, guild);    return; }
+  if (interaction.isButton() && interaction.customId.startsWith('shop_buy_')) { await handleShopBuy(interaction, guild); return; }
 
-  // ── Slash commands ─────────────────────────────────────────────────────────
+  // \u2500\u2500 Slash commands \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   if (!interaction.isChatInputCommand()) return;
 
   // /xp-chart
@@ -228,15 +251,15 @@ client.on('interactionCreate', async (interaction) => {
   // /addpoints
   if (interaction.commandName === 'addpoints') {
     await interaction.deferReply({ ephemeral: true });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('\u274C Admins only.');
     const target = interaction.options.getUser('user');
     const amount = interaction.options.getInteger('amount');
-    const db     = loadLevelsDB();
-    const user   = getUser(db, target.id, target.username);
+    const db = loadLevelsDB();
+    const user = getUser(db, target.id, target.username);
     user.points += amount;
     saveLevelsDB(db);
     await updateLeaderboard(guild);
-    await interaction.editReply(`✅ Added **${amount} pts** to ${target.username}. New balance: **${user.points.toLocaleString()} pts**`);
+    await interaction.editReply(`\u2705 Added **${amount} pts** to ${target.username}. New balance: **${user.points.toLocaleString()} pts**`);
     return;
   }
 
@@ -244,19 +267,19 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.commandName === 'calendar') {
     await interaction.deferReply({ ephemeral: true });
     if (guild) await postWeeklyCalendar(guild, client);
-    await interaction.editReply('📅 Calendar posted!');
+    await interaction.editReply('\u{1F4C5} Calendar posted!');
     return;
   }
 
   // /setup-leaderboard
   if (interaction.commandName === 'setup-leaderboard') {
     await interaction.deferReply({ ephemeral: true });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('\u274C Admins only.');
     try {
       const lbChannel = guild.channels.cache.get(process.env.LEADERBOARD_CHANNEL_ID);
-      if (!lbChannel) return interaction.editReply('❌ Leaderboard channel not found. Check LEADERBOARD_CHANNEL_ID.');
-      const fetched  = await lbChannel.messages.fetch({ limit: 100 });
-      const botMsgs  = fetched.filter(m => m.author.id === client.user.id);
+      if (!lbChannel) return interaction.editReply('\u274C Leaderboard channel not found. Check LEADERBOARD_CHANNEL_ID.');
+      const fetched = await lbChannel.messages.fetch({ limit: 100 });
+      const botMsgs = fetched.filter(m => m.author.id === client.user.id);
       for (const [, msg] of botMsgs) {
         if (msg.pinned) await msg.unpin().catch(() => {});
         await msg.delete().catch(() => {});
@@ -268,22 +291,22 @@ client.on('interactionCreate', async (interaction) => {
         delete store.levels.levelsPanelMessageId;
       }
       markDirty();
-      aw// 1. Repost leaderboard
-    await updateLeaderboard(guild);
-    // 2. Repost rank panel to rank channel
-    const rankChannel = guild.channels.cache.get(process.env.RANK_CHANNEL_ID);
-    if (rankChannel) {
-      const rankFetched = await rankChannel.messages.fetch({ limit: 100 });
-      for (const [, msg] of rankFetched.filter(m => m.author.id === client.user.id)) {
-        if (msg.pinned) await msg.unpin().catch(() => {});
-        await msg.delete().catch(() => {});
+      // 1. Repost leaderboard
+      await updateLeaderboard(guild);
+      // 2. Repost rank panel to rank channel
+      const rankChannel = guild.channels.cache.get(process.env.RANK_CHANNEL_ID);
+      if (rankChannel) {
+        const rankFetched = await rankChannel.messages.fetch({ limit: 100 });
+        for (const [, msg] of rankFetched.filter(m => m.author.id === client.user.id)) {
+          if (msg.pinned) await msg.unpin().catch(() => {});
+          await msg.delete().catch(() => {});
+        }
+        await postLevelsPanel(rankChannel);
       }
-      await postLevelsPanel(rankChannel);
-    }
-    await interaction.editReply('✅ Done! Leaderboard stays in leaderboard channel; rank panel reposted in your-rank channel.');
+      await interaction.editReply('\u2705 Done! Leaderboard stays in leaderboard channel; rank panel reposted in your-rank channel.');
     } catch (err) {
-      console.error('❌ setup-leaderboard error:', err);
-      await interaction.editReply('❌ Error: ' + err.message);
+      console.error('\u274C setup-leaderboard error:', err);
+      await interaction.editReply('\u274C Error: ' + err.message);
     }
     return;
   }
@@ -291,10 +314,10 @@ client.on('interactionCreate', async (interaction) => {
   // /setup-shop
   if (interaction.commandName === 'setup-shop') {
     await interaction.deferReply({ ephemeral: true });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('\u274C Admins only.');
     try {
       const shopChannel = guild.channels.cache.get(process.env.SHOP_CHANNEL_ID);
-      if (!shopChannel) return interaction.editReply('❌ Shop channel not found. Check SHOP_CHANNEL_ID.');
+      if (!shopChannel) return interaction.editReply('\u274C Shop channel not found. Check SHOP_CHANNEL_ID.');
       const fetched = await shopChannel.messages.fetch({ limit: 100 });
       const botMsgs = fetched.filter(m => m.author.id === client.user.id);
       for (const [, msg] of botMsgs) {
@@ -306,10 +329,10 @@ client.on('interactionCreate', async (interaction) => {
       if (store.levels) delete store.levels.shopMessageId;
       markDirty();
       await postShopPanel(shopChannel);
-      await interaction.editReply('✅ Shop reset and reposted!');
+      await interaction.editReply('\u2705 Shop reset and reposted!');
     } catch (err) {
-      console.error('❌ setup-shop error:', err);
-      await interaction.editReply('❌ Error: ' + err.message);
+      console.error('\u274C setup-shop error:', err);
+      await interaction.editReply('\u274C Error: ' + err.message);
     }
     return;
   }
@@ -324,6 +347,32 @@ client.on('interactionCreate', async (interaction) => {
     await postRulesPanel(interaction); return;
   }
 
+  // /setup-trading-lb
+  if (interaction.commandName === 'setup-trading-lb') {
+    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('\u274C Admins only.');
+    try {
+      const { getStore, markDirty } = require('./db');
+      const { loadDB: loadJournalDB } = require('./journal');
+      const jdb = loadJournalDB();
+      delete jdb._tradingLbMessageId;
+      markDirty();
+      const lbCh = await getOrCreateTradingLbChannel(guild);
+      if (!lbCh) return interaction.editReply('\u274C No trading LB channel found. Set TRADING_LB_CHANNEL_ID env var.');
+      // Clear existing bot messages in channel
+      const fetched = await lbCh.messages.fetch({ limit: 100 });
+      for (const [, msg] of fetched.filter(m => m.author.id === client.user.id)) {
+        if (msg.pinned) await msg.unpin().catch(() => {});
+        await msg.delete().catch(() => {});
+      }
+      await postTradingLeaderboard(lbCh);
+      await interaction.editReply('\u2705 Trading leaderboard reposted!');
+    } catch (err) {
+      console.error('\u274C setup-trading-lb error:', err);
+      await interaction.editReply('\u274C Error: ' + err.message);
+    }
+    return;
+  }
 
   // /fixroles-all
   if (interaction.commandName === 'fixroles-all') {
@@ -336,20 +385,25 @@ client.on('interactionCreate', async (interaction) => {
       if (!(u.inventory || []).some(id => id.startsWith('role_'))) { skipped++; continue; }
       const result = await fixUserRole(userId, guild).catch(e => ({ ok: false, msg: e.message }));
       if (result.ok) fixed++;
-      else errList.push(userId.slice(0,8) + '…: ' + result.msg);
+      else errList.push(userId.slice(0, 8) + '\u2026: ' + result.msg);
     }
-    const errMsg = errList.length ? '\n\nErrors:\n' + errList.slice(0,5).join('\n') : '';
-    return interaction.editReply(`✅ Done! Fixed: **${fixed}**, Skipped: **${skipped}**, Errors: **${errList.length}**${errMsg}`);
+    const errMsg = errList.length ? '\n\nErrors:\n' + errList.slice(0, 5).join('\n') : '';
+    return interaction.editReply(`\u2705 Done! Fixed: **${fixed}**, Skipped: **${skipped}**, Errors: **${errList.length}**${errMsg}`);
   }
 
   // /fixrole
   if (interaction.commandName === 'fixrole') {
     await interaction.deferReply({ ephemeral: true });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Admins only.');
-    const target = interaction.options.getUser('user');
-    const result = await fixUserRole(target.id, guild);
-    if (!result.ok) return interaction.editReply('Error: ' + result.msg);
-    await interaction.editReply('Role fixed: ' + result.role.name + ' assigned to ' + result.member.displayName);
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('\u274C Admins only.');
+    try {
+      const target = interaction.options.getUser('user');
+      const result = await fixUserRole(target.id, guild);
+      if (!result.ok) return interaction.editReply('\u274C ' + result.msg);
+      await interaction.editReply('\u2705 Role fixed: **' + result.role.roleName + '** \u2192 ' + result.member.displayName);
+    } catch (err) {
+      console.error('\u274C fixrole error:', err);
+      await interaction.editReply('\u274C Error: ' + err.message).catch(() => {});
+    }
     return;
   }
 });
