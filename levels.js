@@ -31,7 +31,7 @@ function getUser(db, userId, username) {
     db.users[userId] = {
       username, xp: 0, level: 0, points: 0, inventory: [],
       earnedBadges: [], equippedBought: null, equippedEarned: null,
-      totalXPEarned: 0, xpHistory: [],
+      totalXPEarned: 0, xpHistory: [], purchaseLog: [],
     };
   }
   const u = db.users[userId];
@@ -41,6 +41,7 @@ function getUser(db, userId, username) {
   if (u.equippedEarned  === undefined) u.equippedEarned  = null;
   if (!u.totalXPEarned)                u.totalXPEarned   = 0;
   if (!u.xpHistory)                    u.xpHistory       = [];
+  if (!u.purchaseLog) u.purchaseLog = [];
   return u;
 }
 
@@ -584,6 +585,8 @@ async function handleShopBuy(interaction, guild) {
 
   user.points -= item.price;
   user.inventory.push(item.id);
+  if (!user.purchaseLog) user.purchaseLog = [];
+  user.purchaseLog.push({ id: item.id, name: item.name, price: item.price, date: new Date().toISOString() });
   saveDB(db);
 
   if (role) {
@@ -788,6 +791,47 @@ await member.roles.add(discordRole);
 return { ok: true, role: highest, member };
 }
 
+
+// ─── Admin: give item ─────────────────────────────────────────────────────────
+
+async function giveItem(userId, username, itemId, guild) {
+  const role = SHOP_ROLES.find(r => r.id === itemId);
+  const badge = BUYABLE_BADGES.find(b => b.id === itemId);
+  const item = role || badge;
+  if (!item) return { ok: false, msg: 'Unknown item ID: ' + itemId };
+
+  const db = loadDB();
+  const user = getUser(db, userId, username);
+  const alreadyOwned = user.inventory.includes(item.id);
+
+  if (!alreadyOwned) {
+    if (!user.purchaseLog) user.purchaseLog = [];
+    user.purchaseLog.push({ id: item.id, name: item.name, price: item.price, date: new Date().toISOString(), grantedByAdmin: true });
+    user.inventory.push(item.id);
+    saveDB(db);
+  }
+
+  if (role && guild) {
+    try {
+      await guild.roles.fetch().catch(() => {});
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (member) {
+        for (const r of SHOP_ROLES) {
+          const dr = guild.roles.cache.find(gr => gr.name === r.roleName);
+          if (dr && member.roles.cache.has(dr.id)) await member.roles.remove(dr).catch(() => {});
+        }
+        const highest = SHOP_ROLES.filter(r => user.inventory.includes(r.id)).sort((a, b) => b.tier - a.tier)[0];
+        if (highest) {
+          const discordRole = guild.roles.cache.find(gr => gr.name === highest.roleName);
+          if (discordRole) await member.roles.add(discordRole).catch(err => { throw err; });
+        }
+      }
+    } catch (err) { return { ok: false, msg: 'Inventory updated but role assign failed: ' + err.message }; }
+  }
+
+  return { ok: true, item, alreadyOwned };
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -801,4 +845,5 @@ module.exports = {
   handleXPChart,
   handleVCJoin, handleVCLeave, startPassiveXP,
 fixUserRole,
+  giveItem,
 };
