@@ -13,6 +13,7 @@ const {
   handleShopNav, handleXPChart,
   handleVCJoin, handleVCLeave, startPassiveXP,
   fixUserRole,
+  giveItem,
   getUser, loadDB: loadLevelsDB, saveDB: saveLevelsDB,
 } = require('./levels');
 const commands = require('./commands');
@@ -370,6 +371,70 @@ client.on('interactionCreate', async (interaction) => {
     } catch (err) {
       console.error('\u274C setup-trading-lb error:', err);
       await interaction.editReply('\u274C Error: ' + err.message);
+    }
+    return;
+  }
+
+
+  // /inventory
+  if (interaction.commandName === 'inventory') {
+    await interaction.deferReply({ ephemeral: false });
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+    try {
+      const { EmbedBuilder } = require('discord.js');
+      const target = interaction.options.getUser('user');
+      const db = loadLevelsDB();
+      const user = db.users?.[target.id];
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('📦 Inventory — ' + target.username)
+        .setThumbnail(target.displayAvatarURL({ extension: 'png' }))
+        .setFooter({ text: 'Elevate 🪽 • Admin View' })
+        .setTimestamp();
+      if (!user) {
+        embed.setDescription('❌ No data found for this user in the database.');
+      } else {
+        const SHOP_ROLE_IDS = { role_gold: '🌟 Elevate Gold', role_platinum: '💠 Elevate Platinum', role_elite: '👑 Elevate Elite' };
+        const BADGE_IDS = { badge_rising: '🌱 Rising Star', badge_grinder: '⚡ Grinder', badge_veteran: '🌟 Veteran' };
+        const ALL_ITEMS = { ...SHOP_ROLE_IDS, ...BADGE_IDS };
+        const ownedItems = (user.inventory || []).map(id => ALL_ITEMS[id] ? ALL_ITEMS[id] + ' (`' + id + '`)' : '`' + id + '`');
+        const log = (user.purchaseLog || []);
+        const logLines = log.map(p => {
+          const d = new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const tag = p.grantedByAdmin ? ' 🛡️ admin grant' : '';
+          return '• **' + (ALL_ITEMS[p.id] || p.id) + '** — ' + (p.price ? p.price.toLocaleString() + ' pts — ' : '') + d + tag;
+        });
+        embed.addFields(
+          { name: '🪙 Points', value: (user.points || 0).toLocaleString() + ' pts', inline: true },
+          { name: '⬆️ Level', value: String(user.level || 0), inline: true },
+          { name: '📦 Inventory (' + (user.inventory || []).length + ' items)', value: ownedItems.length ? ownedItems.join('\n') : '*Empty*', inline: false },
+          { name: '📋 Purchase Log', value: logLines.length ? logLines.join('\n') : '*No history recorded yet (history added Jun 29, 2026 — only new purchases will appear)*', inline: false },
+        );
+      }
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error('❌ inventory error:', err);
+      await interaction.editReply('❌ Error: ' + err.message).catch(() => {});
+    }
+    return;
+  }
+
+  // /giveitem
+  if (interaction.commandName === 'giveitem') {
+    await interaction.deferReply({ ephemeral: false });
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+    try {
+      const target = interaction.options.getUser('user');
+      const itemId = interaction.options.getString('item');
+      const member = await guild.members.fetch(target.id).catch(() => null);
+      const username = member?.user.username || target.username;
+      const result = await giveItem(target.id, username, itemId, guild);
+      if (!result.ok) return interaction.editReply('❌ ' + result.msg);
+      const status = result.alreadyOwned ? 'already owned — role re-checked' : 'added to inventory';
+      await interaction.editReply('✅ **' + result.item.name + '** ' + status + ' for ' + (member?.displayName || target.username) + '.');
+    } catch (err) {
+      console.error('❌ giveitem error:', err);
+      await interaction.editReply('❌ Error: ' + err.message).catch(() => {});
     }
     return;
   }
