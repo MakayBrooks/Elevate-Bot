@@ -45,4 +45,27 @@ module.exports = [
     .setName('fixroles-all')
     .setDescription('[Admin] Assign correct shop roles to ALL users who bought one in the shop'),
 
+
+  new SlashCommandBuilder()
+    .setName('inventory')
+    .setDescription('[Admin] View a user\'s inventory and purchase history')
+    .addUserOption(opt => opt.setName('user').setDescription('User to check').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('giveitem')
+    .setDescription('[Admin] Manually add a shop item to a user\'s inventory and assign role')
+    .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
+    .addStringOption(opt => opt
+      .setName('item')
+      .setDescription('Item to give')
+      .setRequired(true)
+      .addChoices(
+        { name: '\u{1F31F} Elevate Gold (role)', value: 'role_gold' },
+        { name: '\u{1F4A0} Elevate Platinum (role)', value: 'role_platinum' },
+        { name: '\u{1F451} Elevate Elite (role)', value: 'role_elite' },
+        { name: '\u{1F331} Rising Star badge', value: 'badge_rising' },
+        { name: '\u26A1 Grinder badge', value: 'badge_grinder' },
+        { name: '\u{1F31F} Veteran badge', value: 'badge_veteran' },
+      )),
+
 ].map(cmd => cmd.toJSON());
