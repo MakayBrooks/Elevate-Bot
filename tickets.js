@@ -1,149 +1,250 @@
-const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+'use strict';
+const {
+  ChannelType, PermissionFlagsBits,
+  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+} = require('discord.js');
 const { getStore, markDirty } = require('./db');
 
-function getConfig() {
-  const store = getStore();
-  if (!store._config) store._config = {};
-  return store._config;
+// ─── Config helpers ────────────────────────────────────────────────────────────
+
+function cfg() { return getStore()._ticketHub || (getStore()._ticketHub = {}); }
+function save() { markDirty(); }
+
+// ─── Hub setup ────────────────────────────────────────────────────────────────
+// Creates the 3 hub channels inside the existing admin category.
+// Auto-detects the category by env var TICKET_HUB_CATEGORY_ID or by name
+// containing "ticket" (case-insensitive).
+
+async function setupTicketHub(guild) {
+  const c = cfg();
+
+  // Find or resolve the hub category
+  let cat = null;
+  if (process.env.TICKET_HUB_CATEGORY_ID) {
+    cat = guild.channels.cache.get(process.env.TICKET_HUB_CATEGORY_ID);
+  }
+  if (!cat) {
+    cat = guild.channels.cache.find(ch =>
+      ch.type === ChannelType.GuildCategory &&
+      ch.name.toLowerCase().includes('ticket')
+    );
+  }
+  if (!cat) {
+    console.error('[tickets] No ticket hub category found. Set TICKET_HUB_CATEGORY_ID env var.');
+    return null;
+  }
+
+  const perms = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: guild.client.user.id,    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+  ];
+  const adminRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'admin' || r.permissions.has(PermissionFlagsBits.Administrator) && !r.managed);
+  if (adminRole) perms.push({ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
+
+  async function getOrCreate(idKey, name, topic) {
+    let ch = c[idKey] ? guild.channels.cache.get(c[idKey]) : null;
+    if (!ch) {
+      ch = guild.channels.cache.find(x => x.parentId === cat.id && x.name === name);
+    }
+    if (!ch) {
+      ch = await guild.channels.create({
+        name, topic, type: ChannelType.GuildText, parent: cat.id,
+        permissionOverwrites: perms,
+      });
+    }
+    c[idKey] = ch.id;
+    save();
+    return ch;
+  }
+
+  await getOrCreate('newTicketsCh',    'new-tickets',    'Freshly opened tickets — greet and move to active');
+  await getOrCreate('activeTicketsCh', 'active-tickets', 'All in-progress tickets');
+  await getOrCreate('newMessagesCh',   'new-messages',   'Tickets with unread messages');
+
+  console.log('[tickets] Hub ready:', JSON.stringify({ newTicketsCh: c.newTicketsCh, activeTicketsCh: c.activeTicketsCh, newMessagesCh: c.newMessagesCh }));
+  return true;
 }
 
-async function getOrCreateTicketsHub(guild) {
-  const config = getConfig();
-  if (config.ticketsHubChannelId) {
-    const stored = guild.channels.cache.get(config.ticketsHubChannelId);
-    if (stored) return stored;
-  }
-  if (process.env.TICKETS_CHANNEL_ID) {
-    const envCh = guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
-    if (envCh) { config.ticketsHubChannelId = envCh.id; markDirty(); return envCh; }
-  }
-  const byName = guild.channels.cache.find(ch => ch.name.includes('tickets-hub'));
-  if (byName) { config.ticketsHubChannelId = byName.id; markDirty(); return byName; }
-  try {
-    const adminRole = guild.roles.cache.find(r => r.permissions.has(PermissionFlagsBits.Administrator) && !r.managed);
-    const everyoneRole = guild.roles.everyone;
-    const hubChannel = await guild.channels.create({
-      name: 'tickets-hub',
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
-        ...(adminRole ? [{ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
-        { id: guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
-      ],
-      reason: 'Ticket hub for admin overview',
-    });
-    console.log('Created tickets hub: ' + hubChannel.id);
-    config.ticketsHubChannelId = hubChannel.id;
-    markDirty();
-    return hubChannel;
-  } catch (e) { console.error('Failed to create tickets hub:', e.message); }
-  return null;
-}
+// ─── Card builders ────────────────────────────────────────────────────────────
 
-function buildTicketCard(ticketChannel, member, firstMessage) {
-  const preview = firstMessage?.content?.substring(0, 200) || '*(no message)*';
+function buildCard(ticketCh, status, previewText, authorName, authorAvatar) {
+  const colors = { new: 0xF5C518, active: 0x57F287, message: 0x5865F2 };
+  const labels = { new: '🆕 New Ticket', active: '✅ Active', message: '💬 New Message' };
   return new EmbedBuilder()
-    .setColor(0xF5F0E8)
-    .setTitle(`ticket: ${ticketChannel.name}`)
-    .setDescription(`**${member?.user?.username || 'Unknown'}** opened a ticket.\n\n> ${preview}`)
-    .setThumbnail(member?.user?.displayAvatarURL({ extension: 'png' }) || null)
+    .setColor(colors[status] || 0xAAAAAA)
+    .setTitle(labels[status] + ' — #' + ticketCh.name)
+    .setDescription(previewText ? '> ' + previewText.slice(0, 200) : '*No preview*')
     .addFields(
-      { name: 'User', value: `${member || 'Unknown'}`, inline: true },
-      { name: 'Opened', value: `<t:${Math.floor(ticketChannel.createdTimestamp / 1000)}:R>`, inline: true },
+      { name: 'Channel', value: '<#' + ticketCh.id + '>', inline: true },
+      { name: 'Opened', value: '<t:' + Math.floor(ticketCh.createdTimestamp / 1000) + ':R>', inline: true },
+      ...(authorName ? [{ name: 'User', value: authorName, inline: true }] : []),
     )
-    .setFooter({ text: 'Elevate - Ticket Hub' })
+    .setThumbnail(authorAvatar || null)
+    .setFooter({ text: 'ticket:' + ticketCh.id })
     .setTimestamp();
 }
 
-function buildTicketRow(ticketChannel) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel('Open Ticket')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`https://discord.com/channels/${ticketChannel.guild.id}/${ticketChannel.id}`),
+function buildRow(status, ticketChId) {
+  const row = new ActionRowBuilder();
+  row.addComponents(
+    new ButtonBuilder().setLabel('Open Ticket').setStyle(ButtonStyle.Link)
+      .setURL('https://discord.com/channels/' + (process.env.GUILD_ID || '') + '/' + ticketChId),
   );
+  if (status === 'new') {
+    row.addComponents(
+      new ButtonBuilder().setCustomId('ticket_greet_' + ticketChId).setLabel('✋ Greet & Move to Active').setStyle(ButtonStyle.Success),
+    );
+  }
+  if (status === 'message') {
+    row.addComponents(
+      new ButtonBuilder().setCustomId('ticket_read_' + ticketChId).setLabel('✓ Mark Read').setStyle(ButtonStyle.Secondary),
+    );
+  }
+  return row;
 }
 
-async function postTicketCard(guild, ticketChannel, adminCh, firstMsg) {
-  const hub = adminCh || await getOrCreateTicketsHub(guild);
-  if (!hub) return;
-  let member = null;
+// ─── Post / update card ───────────────────────────────────────────────────────
+
+async function postCard(guild, ticketCh, status, previewText, authorName, authorAvatar) {
+  const c = cfg();
+  const chId = status === 'new' ? c.newTicketsCh : status === 'active' ? c.activeTicketsCh : c.newMessagesCh;
+  if (!chId) return;
+  const panelCh = guild.channels.cache.get(chId);
+  if (!panelCh) return;
+
+  const embed = buildCard(ticketCh, status, previewText, authorName, authorAvatar);
+  const row   = buildRow(status, ticketCh.id);
+  const msg   = await panelCh.send({ embeds: [embed], components: [row] }).catch(e => { console.error('[tickets] postCard:', e.message); });
+
+  // Track card locations
+  if (!c.cards) c.cards = {};
+  if (!c.cards[ticketCh.id]) c.cards[ticketCh.id] = {};
+  if (status !== 'message') {
+    c.cards[ticketCh.id].mainStatus  = status;
+    c.cards[ticketCh.id].mainMsgId   = msg?.id;
+    c.cards[ticketCh.id].mainChId    = chId;
+  } else {
+    c.cards[ticketCh.id].msgCardId   = msg?.id;
+    c.cards[ticketCh.id].msgChId     = chId;
+  }
+  save();
+  return msg;
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+// Called from channelCreate event when Ticketool makes a ticket channel
+async function onTicketCreated(guild, ticketCh) {
+  const c = cfg();
+
+  // Move channel into the hub category if needed
+  const cat = process.env.TICKET_HUB_CATEGORY_ID
+    ? guild.channels.cache.get(process.env.TICKET_HUB_CATEGORY_ID)
+    : guild.channels.cache.find(ch => ch.type === ChannelType.GuildCategory && ch.name.toLowerCase().includes('ticket'));
+  if (cat && ticketCh.parentId !== cat.id) {
+    await ticketCh.setParent(cat.id, { lockPermissions: false }).catch(() => {});
+  }
+
+  // Get first message for preview (wait a moment for Ticketool to post it)
+  await new Promise(r => setTimeout(r, 1500));
+  let preview = '', authorName = '', authorAvatar = '';
   try {
-    for (const [, ow] of ticketChannel.permissionOverwrites.cache) {
-      if (ow.type === 1 && !member) { member = await guild.members.fetch(ow.id).catch(() => null); }
+    const msgs = await ticketCh.messages.fetch({ limit: 5 });
+    const first = msgs.last();
+    if (first) {
+      preview     = first.content || first.embeds[0]?.description || '';
+      authorName  = first.author?.tag || '';
+      authorAvatar= first.author?.displayAvatarURL({ extension: 'png' }) || '';
     }
   } catch {}
-  let firstMessage = firstMsg || null;
-  if (!firstMessage) {
-    try {
-      const msgs = await ticketChannel.messages.fetch({ limit: 5 });
-      firstMessage = msgs.filter(m => !m.author.bot).last();
-    } catch {}
-  }
-  const embed = buildTicketCard(ticketChannel, member, firstMessage);
-  const row = buildTicketRow(ticketChannel);
-  try { return await hub.send({ embeds: [embed], components: [row] }); }
-  catch (e) { console.error('Failed to post ticket card:', e.message); }
+
+  await postCard(guild, ticketCh, 'new', preview, authorName, authorAvatar);
+  console.log('[tickets] New ticket card posted for #' + ticketCh.name);
 }
 
-async function markTicketUpdated(guild, ticketChannel, adminCh) {}
+// Called when a message is sent in a ticket channel
+async function onTicketMessage(guild, ticketCh, message) {
+  // Ignore bot messages
+  if (message.author.bot) return;
+  const c = cfg();
+  if (!c.cards) return;
 
-async function runTicketCatchup(guild) {
-  const hub = await getOrCreateTicketsHub(guild);
-  if (!hub) { console.error('Could not get/create tickets hub'); return; }
-  const ticketChannels = guild.channels.cache.filter(ch =>
-    ch.type === ChannelType.GuildText && /^ticket-/i.test(ch.name)
-  );
-  if (ticketChannels.size === 0) { console.log('No existing text-channel tickets found.'); return; }
-  const existingCards = new Set();
-  try {
-    const msgs = await hub.messages.fetch({ limit: 100 });
-    msgs.forEach(m => {
-      const match = m.components?.[0]?.components?.[0]?.url?.match(/\/channels\/\d+\/(\d+)/);
-      if (match) existingCards.add(match[1]);
-    });
-  } catch {}
-  let posted = 0;
-  for (const [, ch] of ticketChannels) {
-    if (existingCards.has(ch.id)) continue;
-    await postTicketCard(guild, ch, hub, null);
-    posted++;
-    await new Promise(r => setTimeout(r, 300));
+  // Delete previous new-message card for this ticket if exists
+  const card = c.cards[ticketCh.id];
+  if (card?.msgCardId && card?.msgChId) {
+    const prevCh = guild.channels.cache.get(card.msgChId);
+    if (prevCh) await prevCh.messages.delete(card.msgCardId).catch(() => {});
   }
-  if (posted > 0) console.log(`Posted ${posted} ticket catchup cards`);
-  else console.log('All ticket cards already posted.');
+
+  const preview     = message.content || '[attachment/embed]';
+  const authorName  = message.author.tag;
+  const authorAvatar= message.author.displayAvatarURL({ extension: 'png' });
+  await postCard(guild, ticketCh, 'message', preview, authorName, authorAvatar);
 }
 
-// Archive all open forum threads in tickets-hub.
-// Runs once on startup — DB flag prevents repeat on future restarts.
-async function closeAllOpenTickets(guild) {
-  const config = getConfig();
-  if (config.ticketsCleaned) {
-    console.log('Tickets already cleaned, skipping.');
-    return;
+// Called when admin clicks "Greet & Move to Active"
+async function onTicketGreeted(guild, ticketCh) {
+  const c = cfg();
+  const card = c.cards?.[ticketCh.id];
+
+  // Delete the new-tickets card
+  if (card?.mainMsgId && card?.mainChId) {
+    const prevCh = guild.channels.cache.get(card.mainChId);
+    if (prevCh) await prevCh.messages.delete(card.mainMsgId).catch(() => {});
   }
-  const hub = await getOrCreateTicketsHub(guild);
-  if (!hub) return;
-  try {
-    const { threads: activeThreads } = await guild.channels.fetchActiveThreads();
-    let closed = 0;
-    for (const [, thread] of activeThreads) {
-      if (thread.parentId === hub.id && !thread.archived) {
-        try {
-          await thread.setArchived(true);
-          closed++;
-          await new Promise(r => setTimeout(r, 700));
-        } catch(e) {
-          console.error('Failed to archive ' + thread.name + ': ' + e.message);
-        }
-      }
-    }
-    console.log('Archived ' + closed + ' open ticket threads in tickets-hub.');
-    config.ticketsCleaned = true;
-    markDirty();
-  } catch(err) {
-    console.error('closeAllOpenTickets error:', err);
+
+  // Get existing info
+  const preview     = card?.lastPreview || '';
+  const authorName  = card?.authorName  || '';
+  const authorAvatar= card?.authorAvatar|| '';
+
+  // Post in active-tickets
+  await postCard(guild, ticketCh, 'active', preview, authorName, authorAvatar);
+  console.log('[tickets] Moved ticket to active: #' + ticketCh.name);
+}
+
+// Called when admin clicks "Mark Read" (dismiss from new-messages)
+async function onTicketRead(guild, ticketCh) {
+  const c = cfg();
+  const card = c.cards?.[ticketCh.id];
+  if (card?.msgCardId && card?.msgChId) {
+    const prevCh = guild.channels.cache.get(card.msgChId);
+    if (prevCh) await prevCh.messages.delete(card.msgCardId).catch(() => {});
+    delete c.cards[ticketCh.id].msgCardId;
+    delete c.cards[ticketCh.id].msgChId;
+    save();
   }
 }
 
-module.exports = { postTicketCard, markTicketUpdated, runTicketCatchup, getOrCreateTicketsHub, closeAllOpenTickets };
+// Button router — call from interactionCreate handler
+async function handleTicketButton(interaction, guild) {
+  const id = interaction.customId;
+  if (!id.startsWith('ticket_')) return false;
+
+  await interaction.deferUpdate();
+
+  if (id.startsWith('ticket_greet_')) {
+    const chId = id.replace('ticket_greet_', '');
+    const ticketCh = guild.channels.cache.get(chId);
+    if (ticketCh) await onTicketGreeted(guild, ticketCh);
+    await interaction.followUp({ content: '✅ Moved to active tickets.', ephemeral: true }).catch(() => {});
+  }
+
+  if (id.startsWith('ticket_read_')) {
+    const chId = id.replace('ticket_read_', '');
+    const ticketCh = guild.channels.cache.get(chId);
+    if (ticketCh) await onTicketRead(guild, ticketCh);
+    await interaction.followUp({ content: '✓ Marked as read.', ephemeral: true }).catch(() => {});
+  }
+
+  return true;
+}
+
+module.exports = {
+  setupTicketHub,
+  onTicketCreated,
+  onTicketMessage,
+  onTicketGreeted,
+  onTicketRead,
+  handleTicketButton,
+};
