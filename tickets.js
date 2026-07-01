@@ -5,23 +5,24 @@ const {
 } = require('discord.js');
 const { getStore, markDirty } = require('./db');
 
-// âââ Config helpers ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Config helpers Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 
 function cfg() { return getStore()._ticketHub || (getStore()._ticketHub = {}); }
 function save() { markDirty(); }
 
-// âââ Hub setup ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Hub setup Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 // Creates the 3 hub channels inside the existing admin category.
-// Auto-detects the category by env var TICKET_HUB_CATEGORY_ID or by name
+// Auto-detects the category by env var TICKETS_CHANNEL_ID or by name
 // containing "ticket" (case-insensitive).
 
 async function setupTicketHub(guild) {
   const c = cfg();
 
   // Find or resolve the hub category
+  await guild.channels.fetch().catch(()=>{});
   let cat = null;
-  if (process.env.TICKET_HUB_CATEGORY_ID) {
-    cat = guild.channels.cache.get(process.env.TICKET_HUB_CATEGORY_ID);
+  if (process.env.TICKETS_CHANNEL_ID) {
+    cat = guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID);
   }
   if (!cat) {
     cat = guild.channels.cache.find(ch =>
@@ -30,7 +31,7 @@ async function setupTicketHub(guild) {
     );
   }
   if (!cat) {
-    console.error('[tickets] No ticket hub category found. Set TICKET_HUB_CATEGORY_ID env var.');
+    console.error('[tickets] No ticket hub category found. Set TICKETS_CHANNEL_ID env var.');
     return null;
   }
 
@@ -57,7 +58,7 @@ async function setupTicketHub(guild) {
     return ch;
   }
 
-  await getOrCreate('newTicketsCh',    'new-tickets',    'Freshly opened tickets â greet and move to active');
+  await getOrCreate('newTicketsCh',    'new-tickets',    'Freshly opened tickets Ã¢ÂÂ greet and move to active');
   await getOrCreate('activeTicketsCh', 'active-tickets', 'All in-progress tickets');
   await getOrCreate('newMessagesCh',   'new-messages',   'Tickets with unread messages');
 
@@ -65,14 +66,14 @@ async function setupTicketHub(guild) {
   return true;
 }
 
-// âââ Card builders ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Card builders Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 
 function buildCard(ticketCh, status, previewText, authorName, authorAvatar) {
   const colors = { new: 0xF5C518, active: 0x57F287, message: 0x5865F2 };
-  const labels = { new: 'ð New Ticket', active: 'â Active', message: 'ð¬ New Message' };
+  const labels = { new: 'Ã°ÂÂÂ New Ticket', active: 'Ã¢ÂÂ Active', message: 'Ã°ÂÂÂ¬ New Message' };
   return new EmbedBuilder()
     .setColor(colors[status] || 0xAAAAAA)
-    .setTitle(labels[status] + ' â #' + ticketCh.name)
+    .setTitle(labels[status] + ' Ã¢ÂÂ #' + ticketCh.name)
     .setDescription(previewText ? '> ' + previewText.slice(0, 200) : '*No preview*')
     .addFields(
       { name: 'Channel', value: '<#' + ticketCh.id + '>', inline: true },
@@ -92,18 +93,18 @@ function buildRow(status, ticketChId) {
   );
   if (status === 'new') {
     row.addComponents(
-      new ButtonBuilder().setCustomId('ticket_greet_' + ticketChId).setLabel('â Greet & Move to Active').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('ticket_greet_' + ticketChId).setLabel('Ã¢ÂÂ Greet & Move to Active').setStyle(ButtonStyle.Success),
     );
   }
   if (status === 'message') {
     row.addComponents(
-      new ButtonBuilder().setCustomId('ticket_read_' + ticketChId).setLabel('â Mark Read').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('ticket_read_' + ticketChId).setLabel('Ã¢ÂÂ Mark Read').setStyle(ButtonStyle.Secondary),
     );
   }
   return row;
 }
 
-// âââ Post / update card âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Post / update card Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 
 async function postCard(guild, ticketCh, status, previewText, authorName, authorAvatar) {
   const c = cfg();
@@ -131,15 +132,16 @@ async function postCard(guild, ticketCh, status, previewText, authorName, author
   return msg;
 }
 
-// âââ Public API âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Public API Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 
 // Called from channelCreate event when Ticketool makes a ticket channel
 async function onTicketCreated(guild, ticketCh) {
   const c = cfg();
 
   // Move channel into the hub category if needed
-  const cat = process.env.TICKET_HUB_CATEGORY_ID
-    ? guild.channels.cache.get(process.env.TICKET_HUB_CATEGORY_ID)
+  await guild.channels.fetch().catch(()=>{});
+  const cat = process.env.TICKETS_CHANNEL_ID
+    ? guild.channels.cache.get(process.env.TICKETS_CHANNEL_ID)
     : guild.channels.cache.find(ch => ch.type === ChannelType.GuildCategory && ch.name.toLowerCase().includes('ticket'));
   if (cat && ticketCh.parentId !== cat.id) {
     await ticketCh.setParent(cat.id, { lockPermissions: false }).catch(() => {});
@@ -216,7 +218,7 @@ async function onTicketRead(guild, ticketCh) {
   }
 }
 
-// Button router â call from interactionCreate handler
+// Button router Ã¢ÂÂ call from interactionCreate handler
 async function handleTicketButton(interaction, guild) {
   const id = interaction.customId;
   if (!id.startsWith('ticket_')) return false;
@@ -227,14 +229,14 @@ async function handleTicketButton(interaction, guild) {
     const chId = id.replace('ticket_greet_', '');
     const ticketCh = guild.channels.cache.get(chId);
     if (ticketCh) await onTicketGreeted(guild, ticketCh);
-    await interaction.followUp({ content: 'â Moved to active tickets.', ephemeral: true }).catch(() => {});
+    await interaction.followUp({ content: 'Ã¢ÂÂ Moved to active tickets.', ephemeral: true }).catch(() => {});
   }
 
   if (id.startsWith('ticket_read_')) {
     const chId = id.replace('ticket_read_', '');
     const ticketCh = guild.channels.cache.get(chId);
     if (ticketCh) await onTicketRead(guild, ticketCh);
-    await interaction.followUp({ content: 'â Marked as read.', ephemeral: true }).catch(() => {});
+    await interaction.followUp({ content: 'Ã¢ÂÂ Marked as read.', ephemeral: true }).catch(() => {});
   }
 
   return true;
@@ -267,10 +269,10 @@ async function syncExistingTickets(guild) {
     } catch {}
 
     await postCard(guild, ticketCh, 'active', previewText, authorName, authorAvatar)
-      .catch(e => console.error('❌ syncExistingTickets postCard:', e));
+      .catch(e => console.error('â syncExistingTickets postCard:', e));
     synced++;
   }
-  console.log('✅ Synced ' + synced + ' existing ticket(s) to hub.');
+  console.log('â Synced ' + synced + ' existing ticket(s) to hub.');
 }
 
 module.exports = {
