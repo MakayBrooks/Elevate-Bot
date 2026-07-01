@@ -20,7 +20,7 @@ const commands = require('./commands');
 const { postStartHerePanel } = require('./startHere');
 const { postRulesPanel } = require('./setupRules');
 const { postTradingLeaderboard, refreshTradingLeaderboard: handleTradingLbRefresh, getOrCreateTradingLbChannel } = require('./trading-leaderboard');
-const { setupTicketHub, onTicketCreated, onTicketMessage, handleTicketButton } = require('./tickets');
+const { setupTicketHub, syncExistingTickets, onTicketCreated, onTicketMessage, handleTicketButton } = require('./tickets');
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -142,8 +142,8 @@ client.once('ready', async () => {
   }, { timezone: 'America/New_York' });
   console.log('\u23F0 NY session open scheduled: weekdays 9:30 AM ET');
 
-  // ── Ticket hub setup ──────────────────────────────────────────────
-  if (guild) await setupTicketHub(guild).catch(e => console.error('❌ Ticket hub setup:', e));
+  // ââ Ticket hub setup ââââââââââââââââââââââââââââââââââââââââââââââ
+  if (guild) await setupTicketHub(guild).catch(e => console.error('â Ticket hub setup:', e));
 });
 
 // \u2500\u2500 Member events \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -169,7 +169,7 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
   // Ticket message tracking
   if (message.channel.name?.startsWith('ticket-')) {
-    await onTicketMessage(message.guild, message.channel, message).catch(e => console.error('❌ onTicketMessage:', e));
+    await onTicketMessage(message.guild, message.channel, message).catch(e => console.error('â onTicketMessage:', e));
     return;
   }
   const now = Date.now();
@@ -179,12 +179,12 @@ client.on('messageCreate', async (message) => {
   await addXP(message.author.id, message.author.username, 5, message.guild);
 });
 
-// ── Ticket channel detection ──────────────────────────────────────────────
+// ââ Ticket channel detection ââââââââââââââââââââââââââââââââââââââââââââââ
 
 client.on('channelCreate', async (channel) => {
   if (!channel.guild) return;
   if (!channel.name.startsWith('ticket-')) return;
-  await onTicketCreated(channel.guild, channel).catch(e => console.error('❌ onTicketCreated:', e));
+  await onTicketCreated(channel.guild, channel).catch(e => console.error('â onTicketCreated:', e));
 });
 
 // \u2500\u2500 Voice XP \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -202,9 +202,9 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 client.on('interactionCreate', async (interaction) => {
   const guild = interaction.guild;
 
-  // ── Ticket buttons ─────────────────────────────────────────────────────
+  // ââ Ticket buttons âââââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (interaction.isButton() && (interaction.customId.startsWith('ticket_greet_') || interaction.customId.startsWith('ticket_read_'))) {
-    await handleTicketButton(interaction, guild).catch(e => console.error('❌ handleTicketButton:', e));
+    await handleTicketButton(interaction, guild).catch(e => console.error('â handleTicketButton:', e));
     return;
   }
 
@@ -401,7 +401,7 @@ client.on('interactionCreate', async (interaction) => {
   // /inventory
   if (interaction.commandName === 'inventory') {
     await interaction.deferReply({ ephemeral: false });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('â Admins only.');
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Ã¢ÂÂ Admins only.');
     try {
       const { EmbedBuilder } = require('discord.js');
       const target = interaction.options.getUser('user');
@@ -409,34 +409,34 @@ client.on('interactionCreate', async (interaction) => {
       const user = db.users?.[target.id];
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('ð¦ Inventory â ' + target.username)
+        .setTitle('Ã°ÂÂÂ¦ Inventory Ã¢ÂÂ ' + target.username)
         .setThumbnail(target.displayAvatarURL({ extension: 'png' }))
-        .setFooter({ text: 'Elevate ðª½ â¢ Admin View' })
+        .setFooter({ text: 'Elevate Ã°ÂÂªÂ½ Ã¢ÂÂ¢ Admin View' })
         .setTimestamp();
       if (!user) {
-        embed.setDescription('â No data found for this user in the database.');
+        embed.setDescription('Ã¢ÂÂ No data found for this user in the database.');
       } else {
-        const SHOP_ROLE_IDS = { role_gold: 'ð Elevate Gold', role_platinum: 'ð  Elevate Platinum', role_elite: 'ð Elevate Elite' };
-        const BADGE_IDS = { badge_rising: 'ð± Rising Star', badge_grinder: 'â¡ Grinder', badge_veteran: 'ð Veteran' };
+        const SHOP_ROLE_IDS = { role_gold: 'Ã°ÂÂÂ Elevate Gold', role_platinum: 'Ã°ÂÂÂ  Elevate Platinum', role_elite: 'Ã°ÂÂÂ Elevate Elite' };
+        const BADGE_IDS = { badge_rising: 'Ã°ÂÂÂ± Rising Star', badge_grinder: 'Ã¢ÂÂ¡ Grinder', badge_veteran: 'Ã°ÂÂÂ Veteran' };
         const ALL_ITEMS = { ...SHOP_ROLE_IDS, ...BADGE_IDS };
         const ownedItems = (user.inventory || []).map(id => ALL_ITEMS[id] ? ALL_ITEMS[id] + ' (`' + id + '`)' : '`' + id + '`');
         const log = (user.purchaseLog || []);
         const logLines = log.map(p => {
           const d = new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          const tag = p.grantedByAdmin ? ' ð¡ï¸ admin grant' : '';
-          return 'â¢ **' + (ALL_ITEMS[p.id] || p.id) + '** â ' + (p.price ? p.price.toLocaleString() + ' pts â ' : '') + d + tag;
+          const tag = p.grantedByAdmin ? ' Ã°ÂÂÂ¡Ã¯Â¸Â admin grant' : '';
+          return 'Ã¢ÂÂ¢ **' + (ALL_ITEMS[p.id] || p.id) + '** Ã¢ÂÂ ' + (p.price ? p.price.toLocaleString() + ' pts Ã¢ÂÂ ' : '') + d + tag;
         });
         embed.addFields(
-          { name: 'ðª Points', value: (user.points || 0).toLocaleString() + ' pts', inline: true },
-          { name: 'â¬ï¸ Level', value: String(user.level || 0), inline: true },
-          { name: 'ð¦ Inventory (' + (user.inventory || []).length + ' items)', value: ownedItems.length ? ownedItems.join('\n') : '*Empty*', inline: false },
-          { name: 'ð Purchase Log', value: logLines.length ? logLines.join('\n') : '*No history recorded yet (history added Jun 29, 2026 â only new purchases will appear)*', inline: false },
+          { name: 'Ã°ÂÂªÂ Points', value: (user.points || 0).toLocaleString() + ' pts', inline: true },
+          { name: 'Ã¢Â¬ÂÃ¯Â¸Â Level', value: String(user.level || 0), inline: true },
+          { name: 'Ã°ÂÂÂ¦ Inventory (' + (user.inventory || []).length + ' items)', value: ownedItems.length ? ownedItems.join('\n') : '*Empty*', inline: false },
+          { name: 'Ã°ÂÂÂ Purchase Log', value: logLines.length ? logLines.join('\n') : '*No history recorded yet (history added Jun 29, 2026 Ã¢ÂÂ only new purchases will appear)*', inline: false },
         );
       }
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
-      console.error('â inventory error:', err);
-      await interaction.editReply('â Error: ' + err.message).catch(() => {});
+      console.error('Ã¢ÂÂ inventory error:', err);
+      await interaction.editReply('Ã¢ÂÂ Error: ' + err.message).catch(() => {});
     }
     return;
   }
@@ -444,19 +444,19 @@ client.on('interactionCreate', async (interaction) => {
   // /giveitem
   if (interaction.commandName === 'giveitem') {
     await interaction.deferReply({ ephemeral: false });
-    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('â Admins only.');
+    if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('Ã¢ÂÂ Admins only.');
     try {
       const target = interaction.options.getUser('user');
       const itemId = interaction.options.getString('item');
       const member = await guild.members.fetch(target.id).catch(() => null);
       const username = member?.user.username || target.username;
       const result = await giveItem(target.id, username, itemId, guild);
-      if (!result.ok) return interaction.editReply('â ' + result.msg);
-      const status = result.alreadyOwned ? 'already owned â role re-checked' : 'added to inventory';
-      await interaction.editReply('â **' + result.item.name + '** ' + status + ' for ' + (member?.displayName || target.username) + '.');
+      if (!result.ok) return interaction.editReply('Ã¢ÂÂ ' + result.msg);
+      const status = result.alreadyOwned ? 'already owned Ã¢ÂÂ role re-checked' : 'added to inventory';
+      await interaction.editReply('Ã¢ÂÂ **' + result.item.name + '** ' + status + ' for ' + (member?.displayName || target.username) + '.');
     } catch (err) {
-      console.error('â giveitem error:', err);
-      await interaction.editReply('â Error: ' + err.message).catch(() => {});
+      console.error('Ã¢ÂÂ giveitem error:', err);
+      await interaction.editReply('Ã¢ÂÂ Error: ' + err.message).catch(() => {});
     }
     return;
   }
