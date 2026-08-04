@@ -50,11 +50,16 @@ function fetchJSON(url) {
   });
 }
 
+// Returns the Mon–Fri of the NEXT upcoming trading week relative to "now".
+// If today is Monday, returns today's week; otherwise rolls forward to the next Monday.
+// This is what makes a Sunday-night post show the week about to start, not the one that just ended
+// (the old version walked backward to last week's Monday when run on a Sunday).
 function getWeekDates() {
   const now = new Date();
-  const day = now.getDay(); // 0 = Sun
+  const day = now.getDay(); // 0 = Sun ... 6 = Sat
+  const daysUntilMonday = (8 - day) % 7; // Mon->0, Tue->6, Wed->5, Thu->4, Fri->3, Sat->2, Sun->1
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((day + 6) % 7));
+  monday.setDate(now.getDate() + daysUntilMonday);
   monday.setHours(0, 0, 0, 0);
   const days = [];
   for (let i = 0; i < 5; i++) {
@@ -62,23 +67,34 @@ function getWeekDates() {
     d.setDate(monday.getDate() + i);
     days.push(d);
   }
-  return days; // Mon–Fri
+  return days; // Mon–Fri, always the upcoming/current week
 }
 
 function isoDate(d) {
   return d.toISOString().split('T')[0];
 }
 
-// Format time string — the FF API returns e.g. "8:30am", normalise to "8:30 AM ET"
 function fmtTime(raw) {
   if (!raw || raw === 'All Day' || raw === 'Tentative') return raw || 'TBD';
-  // Already looks reasonable — just uppercase am/pm and add ET
   return raw.replace(/am$/i, ' AM').replace(/pm$/i, ' PM').replace(/\s+ET$/, '') + ' ET';
+}
+
+// Proper chronological sort key — fixes string-sorting bug where "10:00am" sorted before "8:30am"
+function timeToMinutes(raw) {
+  if (!raw || raw === 'All Day') return -1;
+  if (raw === 'Tentative') return 9998;
+  const m = raw.match(/(\d{1,2}):(\d{2})(am|pm)/i);
+  if (!m) return 9999;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ampm = m[3].toLowerCase();
+  if (ampm === 'pm' && h !== 12) h += 12;
+  if (ampm === 'am' && h === 12) h = 0;
+  return h * 60 + min;
 }
 
 async function getWeeklyEconomicEvents() {
   try {
-    // Primary feed — this-week + next-week to make sure we catch all days
     const [thisWeek, nextWeek] = await Promise.all([
       fetchJSON('https://nfs.faireconomy.media/ff_calendar_thisweek.json'),
       fetchJSON('https://nfs.faireconomy.media/ff_calendar_nextweek.json'),
@@ -86,7 +102,6 @@ async function getWeeklyEconomicEvents() {
     const combined = [...(Array.isArray(thisWeek) ? thisWeek : []), ...(Array.isArray(nextWeek) ? nextWeek : [])];
     const weekDates = getWeekDates().map(isoDate);
 
-    // Filter: USD + medium or high impact
     const events = combined.filter(e =>
       e.country === 'USD' &&
       INCLUDED_IMPACTS.includes(e.impact) &&
@@ -97,13 +112,11 @@ async function getWeeklyEconomicEvents() {
   } catch (err) {
     console.error('Calendar fetch error:', err);
   }
-  return []; // return empty so the per-day loop still shows every day
+  return [];
 }
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-// 📅 number emojis for each day
 const DAY_EMOJIS = { Mon: '1️⃣', Tue: '2️⃣', Wed: '3️⃣', Thu: '4️⃣', Fri: '5️⃣' };
-// Impact folder emojis (matching Forex Factory colours)
 const IMPACT_EMOJI = { High: '🔴', Medium: '🟠' };
 
 async function postWeeklyCalendar(guild, client) {
@@ -111,33 +124,38 @@ async function postWeeklyCalendar(guild, client) {
     const channel = guild.channels.cache.get(process.env.CALENDAR_CHANNEL_ID);
     if (!channel) return;
 
-    const weekDates = getWeekDates(); // Mon–Fri Date objects
+    const weekDates = getWeekDates(); // Mon–Fri, upcoming week
     const events = await getWeeklyEconomicEvents();
 
-    // Group events by ISO date string
     const byDate = {};
     for (const e of events) {
       const key = (e.date || '').split('T')[0];
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(e);
     }
-    // Sort events within each day by time (rough sort — AM < PM alphabetically works for hh:mm)
     for (const key of Object.keys(byDate)) {
-      byDate[key].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      byDate[key].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
     }
 
     const monday = weekDates[0];
     const friday = weekDates[4];
     const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+    const highCount = events.filter(e => e.impact === 'High').length;
+    const medCount = events.filter(e => e.impact === 'Medium').length;
+    const holidayCount = weekDates.filter(d => getBankHoliday(d)).length;
+
     const embed = new EmbedBuilder()
-      .setColor(0xFF6600)
-      .setTitle(`📅 MARKET NEWS | ${fmt(monday)} – ${fmt(friday)}`)
+      .setColor(0xF5A623)
+      .setAuthor({ name: 'Elevate 🪽 Economic Calendar', iconURL: guild.iconURL({ size: 128 }) || undefined })
+      .setTitle(`📅 Week of ${fmt(monday)} – ${fmt(friday)}`)
       .setDescription(
-        '> 🔴 **Red folder** = High Impact &nbsp;|&nbsp; 🟠 **Orange folder** = Medium Impact\n' +
-        '> All times **Eastern (ET)**. Source: Forex Factory.\n\u200b'
+        `> 🔴 **High Impact** • 🟠 **Medium Impact** — all times **ET**\n` +
+        `> **${highCount}** high-impact · **${medCount}** medium-impact${holidayCount ? ` · **${holidayCount}** bank holiday${holidayCount > 1 ? 's' : ''}` : ''}\n` +
+        `> Source: Forex Factory\n\u200b`
       )
-      .setFooter({ text: 'Elevate 🪽 • Economic Calendar • Auto-posted Sunday 7 PM ET' })
+      .setThumbnail(guild.iconURL({ size: 256 }) || null)
+      .setFooter({ text: 'Elevate 🪽 • Economic Calendar • Auto-posted every Sunday 8 PM ET' })
       .setTimestamp();
 
     for (let i = 0; i < 5; i++) {
@@ -152,26 +170,23 @@ async function postWeeklyCalendar(guild, client) {
       if (holiday) {
         value = `🏦 **US Bank Holiday — ${holiday.name}**\n*Markets closed*`;
       } else if (!dayEvents.length) {
-        value = '*No medium/high-impact USD events*';
+        value = '*No medium/high-impact USD events scheduled*';
       } else {
         value = dayEvents.map(e => {
           const impact = IMPACT_EMOJI[e.impact] || '⚪';
           const time = fmtTime(e.time);
-          const forecast = e.forecast && e.forecast !== '' ? ` | Fcst: \`${e.forecast}\`` : '';
-          const prev = e.previous && e.previous !== '' ? ` | Prev: \`${e.previous}\`` : '';
-          return `${impact} **${e.title}** — ${time}${forecast}${prev}`;
+          const forecast = e.forecast && e.forecast !== '' ? ` \`Fcst: ${e.forecast}\`` : '';
+          const prev = e.previous && e.previous !== '' ? ` \`Prev: ${e.previous}\`` : '';
+          return `${impact} **${e.title}**\n> 🕐 ${time}${forecast}${prev}`;
         }).join('\n');
       }
 
-      embed.addFields({
-        name: `${DAY_EMOJIS[label]} ${dayDisplay}`,
-        value,
-        inline: false,
-      });
+      embed.addFields({ name: `${DAY_EMOJIS[label]} ${dayDisplay}`, value, inline: false });
+      if (i < 4) embed.addFields({ name: '\u200b', value: '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬', inline: false });
     }
 
     await channel.send({ content: '@everyone', embeds: [embed] });
-    console.log('✅ Weekly calendar posted');
+    console.log('✅ Weekly calendar posted (upcoming week)');
   } catch (err) {
     console.error('❌ Calendar error:', err);
   }
