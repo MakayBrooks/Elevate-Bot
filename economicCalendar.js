@@ -50,25 +50,34 @@ function fetchJSON(url) {
   });
 }
 
-// Returns the Mon–Fri of the NEXT upcoming trading week relative to "now".
-// If today is Monday, returns today's week; otherwise rolls forward to the next Monday.
-// This is what makes a Sunday-night post show the week about to start, not the one that just ended
-// (the old version walked backward to last week's Monday when run on a Sunday).
-function getWeekDates() {
-  const now = new Date();
-  const day = now.getDay(); // 0 = Sun ... 6 = Sat
-  const daysUntilMonday = (8 - day) % 7; // Mon->0, Tue->6, Wed->5, Thu->4, Fri->3, Sat->2, Sun->1
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + daysUntilMonday);
-  monday.setHours(0, 0, 0, 0);
-  const days = [];
-  for (let i = 0; i < 5; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    days.push(d);
+// Returns the Mon–Fri of a trading week relative to "now".
+  // week = 'upcoming' (default): if today is Monday, returns today's week; otherwise
+  //   rolls forward to the next Monday. This is what makes a Sunday-night auto-post
+  //   show the week about to start, not the one that just ended.
+  // week = 'current': always the Mon–Fri block containing today, even mid-week —
+  //   for manually posting "this week's" news on a Tuesday, Wednesday, etc.
+  function getWeekDates(week = 'upcoming') {
+        const now = new Date();
+        const day = now.getDay(); // 0 = Sun ... 6 = Sat
+        let monday;
+        if (week === 'current') {
+                const diffToMonday = day === 0 ? -6 : 1 - day; // walk backward to Monday of this week
+                monday = new Date(now);
+                monday.setDate(now.getDate() + diffToMonday);
+        } else {
+                const daysUntilMonday = (8 - day) % 7; // Mon->0, Tue->6, Wed->5, Thu->4, Fri->3, Sat->2, Sun->1
+                monday = new Date(now);
+                monday.setDate(now.getDate() + daysUntilMonday);
+        }
+        monday.setHours(0, 0, 0, 0);
+        const days = [];
+        for (let i = 0; i < 5; i++) {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                days.push(d);
+        }
+        return days; // Mon–Fri
   }
-  return days; // Mon–Fri, always the upcoming/current week
-}
 
 function isoDate(d) {
   return d.toISOString().split('T')[0];
@@ -93,14 +102,14 @@ function timeToMinutes(raw) {
   return h * 60 + min;
 }
 
-async function getWeeklyEconomicEvents() {
+async function getWeeklyEconomicEvents(week = 'upcoming') {
   try {
     const [thisWeek, nextWeek] = await Promise.all([
       fetchJSON('https://nfs.faireconomy.media/ff_calendar_thisweek.json'),
       fetchJSON('https://nfs.faireconomy.media/ff_calendar_nextweek.json'),
     ]);
     const combined = [...(Array.isArray(thisWeek) ? thisWeek : []), ...(Array.isArray(nextWeek) ? nextWeek : [])];
-    const weekDates = getWeekDates().map(isoDate);
+    const weekDates = getWeekDates(week).map(isoDate);
 
     const events = combined.filter(e =>
       e.country === 'USD' &&
@@ -119,13 +128,13 @@ const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const DAY_EMOJIS = { Mon: '1️⃣', Tue: '2️⃣', Wed: '3️⃣', Thu: '4️⃣', Fri: '5️⃣' };
 const IMPACT_EMOJI = { High: '🔴', Medium: '🟠' };
 
-async function postWeeklyCalendar(guild, client) {
+async function postWeeklyCalendar(guild, client, week = 'upcoming') {
   try {
     const channel = guild.channels.cache.get(process.env.CALENDAR_CHANNEL_ID);
     if (!channel) return;
 
-    const weekDates = getWeekDates(); // Mon–Fri, upcoming week
-    const events = await getWeeklyEconomicEvents();
+    const weekDates = getWeekDates(week); // Mon–Fri, upcoming week
+    const events = await getWeeklyEconomicEvents(week);
 
     const byDate = {};
     for (const e of events) {
@@ -155,7 +164,7 @@ async function postWeeklyCalendar(guild, client) {
         `> Source: Forex Factory\n\u200b`
       )
       .setThumbnail(guild.iconURL({ size: 256 }) || null)
-      .setFooter({ text: 'Elevate 🪽 • Economic Calendar • Auto-posted every Sunday 8 PM ET' })
+      .setFooter({ text: `Elevate 🪽 • Economic Calendar • ${week === 'current' ? 'This week' : 'Auto-posted every Sunday 8 PM ET'}` })
       .setTimestamp();
 
     for (let i = 0; i < 5; i++) {
