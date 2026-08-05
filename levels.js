@@ -399,13 +399,14 @@ async function handleShopBuy(interaction, guild) {
   if (role) {
     try {
       const member = await guild.members.fetch(interaction.user.id);
-      for (const r of SHOP_ROLES) {
-        const dr = guild.roles.cache.find(gr => gr.name === r.roleName);
+            const allRoles = await guild.roles.fetch();
+            for (const r of SHOP_ROLES) {
+        const dr = allRoles.find(gr => gr.name === r.roleName);
         if (dr && member.roles.cache.has(dr.id)) await member.roles.remove(dr).catch(() => {});
       }
       const ownedRoles = SHOP_ROLES.filter(r => user.inventory.includes(r.id)).sort((a, b) => b.tier - a.tier)[0];
       if (ownedRoles) {
-        const discordRole = guild.roles.cache.find(gr => gr.name === ownedRoles.roleName);
+        const discordRole = allRoles.find(gr => gr.name === ownedRoles.roleName);
         if (discordRole) await member.roles.add(discordRole).catch(() => {});
       }
     } catch (err) { console.error('Role assign error:', err); }
