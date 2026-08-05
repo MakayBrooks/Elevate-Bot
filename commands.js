@@ -14,7 +14,14 @@ module.exports = [
 
   new SlashCommandBuilder()
     .setName('calendar')
-    .setDescription("Post this week's economic calendar (admin only)"),
+    .setDescription("Post the economic calendar (admin only)")
+      .addStringOption(opt => opt
+              .setName('week')
+              .setDescription('Which week to post (defaults to upcoming week)')
+              .addChoices(
+                { name: 'This Week', value: 'current' },
+                { name: 'Next Week', value: 'upcoming' },
+                      )),
 
   new SlashCommandBuilder()
     .setName('setup-leaderboard')
