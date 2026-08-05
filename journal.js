@@ -449,7 +449,7 @@ async function handleMyJournal(interaction, page = 0) {
   return {
     embeds: [buildJournalPageEmbed(trades, safePage, interaction.user.username)],
     components: buildJournalComponents(trades, safePage, interaction.user.id),
-    
+  };
 }
 
 // ââ Main interaction handler âââââââââââââââââââââââââââââââââââââââââââââââ
