@@ -209,7 +209,7 @@ function buildTradeFormMessage(state = {}) {
       .setDisabled(!(outcome && position && session && rr))
   );
 
-  return { embeds: [embed], components: [outcomeRow, posRow, sessionRow, rrRow, btnRow], flags: MessageFlags.Ephemeral };
+  return { embeds: [embed], components: [outcomeRow, posRow, sessionRow, rrRow, btnRow] };
 }
 
 // ââ Step 2 modal (pair, pnl, notes only) ââââââââââââââââââââââââââââââââââ
@@ -441,7 +441,7 @@ async function handleMyJournal(interaction, page = 0) {
       .setTitle('\u{1F4DA} Your Trading Journal')
       .setDescription('No trades logged yet. Click **\u{1F4DD} Log a Trade** to get started!')
       .setFooter({ text: 'Elevate \u{1FABD} \u2022 Only you can see this' });
-    return { embeds: [empty], components: [], flags: MessageFlags.Ephemeral };
+    return { embeds: [empty], components: [] };
   }
   const trades = userData.trades;
   const totalPages = Math.max(1, Math.ceil(trades.length / TRADES_PER_PAGE));
@@ -449,8 +449,7 @@ async function handleMyJournal(interaction, page = 0) {
   return {
     embeds: [buildJournalPageEmbed(trades, safePage, interaction.user.username)],
     components: buildJournalComponents(trades, safePage, interaction.user.id),
-    flags: MessageFlags.Ephemeral,
-  };
+    
 }
 
 // ââ Main interaction handler âââââââââââââââââââââââââââââââââââââââââââââââ
@@ -507,7 +506,7 @@ async function handleJournalInteraction(interaction, client) {
   if (interaction.isButton() && interaction.customId === 'journal_log_trade') {
     try {
       tradeFormState.set(interaction.user.id, {});
-      await interaction.reply(buildTradeFormMessage({}));
+      await interaction.reply({ ...buildTradeFormMessage({}), flags: MessageFlags.Ephemeral });
     } catch (err) {
       if (err.code === 10062 || err.rawError?.message?.includes('already been acknowledged')) return;
     }
