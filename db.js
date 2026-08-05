@@ -2,7 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-const LOCAL_PATH = path.join(__dirname, 'data', 'db.json');
+// /data is the Railway persistent volume mount (elevate-bot-volume) — it
+// survives redeploys. __dirname/data does NOT; it's inside the ephemeral
+// app directory and gets wiped on every deploy. This path must stay pointed
+// at the volume or local storage silently stops persisting again.
+const LOCAL_PATH = process.env.RAILWAY_VOLUME_MOUNT_PATH
+  ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'db.json')
+      : path.join(__dirname, 'data', 'db.json');
 const GIST_FILENAME = 'elevate-bot-db.json';
 
 function ensureDir() {
