@@ -146,6 +146,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // Interactions
 client.on('interactionCreate', async (interaction) => {
   const guild = interaction.guild;
+  try {
 
   // Journal
   if (
@@ -184,8 +185,9 @@ client.on('interactionCreate', async (interaction) => {
   // /calendar
   if (interaction.commandName === 'calendar') {
     await interaction.deferReply({ ephemeral: true });
-    if (guild) await postWeeklyCalendar(guild, client);
-    await interaction.editReply('📅 Calendar posted!');
+    const week = interaction.options.getString('week') || 'upcoming';
+        if (guild) await postWeeklyCalendar(guild, client, week);
+        await interaction.editReply(`📅 ${week === 'current' ? "This week's" : "Next week's"} calendar posted!`);
   }
 
   // /setup-start-here — post the server onboarding embed panel
@@ -380,6 +382,21 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.editReply('❌ Error: ' + err.message);
     }
   }
+} catch (err) {
+              // Last-resort safety net: without this, an uncaught error anywhere above
+      // leaves the interaction unacknowledged and Discord shows "did not respond
+      // in time" with zero indication of what broke. Now it always gets a reply,
+      // and the real error is still logged for debugging.
+      console.error('❌ Unhandled interaction error:', err);
+      try {
+              if (interaction.deferred || interaction.replied) {
+                        await interaction.followUp({ content: '❌ Something went wrong. Please try again.', ephemeral: true });
+              } else {
+                        await interaction.reply({ content: '❌ Something went wrong. Please try again.', ephemeral: true });
+              }
+      } catch {}
+}
+
 });
 
 client.login(process.env.BOT_TOKEN);
