@@ -43,6 +43,10 @@ module.exports = [
     .setName('setup-trading-lb')
     .setDescription('Admin: reset and repost the trading leaderboard'),
 
+    new SlashCommandBuilder()
+      .setName('setup-mentorship')
+      .setDescription('Admin: clear the mentorship channel history and post the fresh application panel'),
+
   new SlashCommandBuilder()
     .setName('fixrole')
     .setDescription('[Admin] Manually assign the correct shop role to a user based on their inventory')
