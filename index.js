@@ -5,6 +5,7 @@ const { loadAll } = require('./db');
 const { generateWelcomeCard } = require('./welcomeCard');
 const { postWeeklyCalendar } = require('./economicCalendar');
 const { handleJournalInteraction, sendJournalPanel } = require('./journal');
+const { postMentorshipPanel, clearChannelHistory: clearMentorshipHistory, handleMentorshipInteraction } = require('./mentorship');
 const {
   addXP, handleBoost, updateLeaderboard, initDB,
   postLevelsPanel, postShopPanel,
@@ -98,6 +99,21 @@ client.once('ready', async () => {
     }
   } catch (err) { console.error('❌ Shop panel error:', err); }
 
+    // Mentorship panel
+    try {
+          if (guild) {
+                  const mentorshipChId = process.env.MENTORSHIP_CHANNEL_ID
+                    || guild.channels.cache.find(ch => ch.name.toLowerCase().includes('mentor'))?.id;
+                  const mentorshipChannel = mentorshipChId ? guild.channels.cache.get(mentorshipChId) : null;
+                  if (mentorshipChannel) {
+                            await postMentorshipPanel(mentorshipChannel);
+                            console.log('✅ Mentorship panel ready.');
+                  } else {
+                            console.error('❌ Mentorship channel not found. Set MENTORSHIP_CHANNEL_ID.');
+                  }
+          }
+    } catch (err) { console.error('❌ Mentorship panel error:', err); }
+
   startPassiveXP(client);
 
   cron.schedule('0 20 * * 0', async () => {
@@ -154,6 +170,12 @@ client.on('interactionCreate', async (interaction) => {
     (interaction.isModalSubmit() && interaction.customId.startsWith('journal_')) ||
     (interaction.isChatInputCommand() && interaction.commandName === 'journal')
   ) { await handleJournalInteraction(interaction, client); return; }
+
+      // Mentorship application
+      if (
+            (interaction.isButton() && interaction.customId.startsWith('mentorship_')) ||
+            (interaction.isStringSelectMenu() && interaction.customId.startsWith('mentorship_'))
+          ) { await handleMentorshipInteraction(interaction, client); return; }
 
   // Rank button
   if (interaction.isButton() && interaction.customId === 'levels_check_rank') { await handleCheckRank(interaction, guild); return; }
@@ -382,6 +404,32 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.editReply('❌ Error: ' + err.message);
     }
   }
+
+      // /setup-mentorship -- admin command to clear channel history and post the fresh application panel
+      if (interaction.commandName === 'setup-mentorship') {
+            await interaction.deferReply({ ephemeral: true });
+            if (!interaction.member.permissions.has('Administrator')) return interaction.editReply('❌ Admins only.');
+            try {
+                    const mentorshipChannel = interaction.channel;
+                    const { recentDeleted, oldDeleted, failed } = await clearMentorshipHistory(mentorshipChannel);
+
+                    const { getStore, markDirty } = require('./db');
+                    const store = getStore();
+                    if (store._mentorship) delete store._mentorship.panelMessageId;
+                    markDirty();
+
+                    await postMentorshipPanel(mentorshipChannel);
+
+                    await interaction.editReply(
+                              `✅ Mentorship channel reset! Deleted ${recentDeleted + oldDeleted} message(s)` +
+                              (failed ? ` (${failed} failed to delete)` : '') +
+                              `. Fresh application panel posted.`
+                            );
+            } catch (err) {
+                    console.error('❌ setup-mentorship error:', err);
+                    await interaction.editReply('❌ Error: ' + err.message);
+            }
+      }
 } catch (err) {
               // Last-resort safety net: without this, an uncaught error anywhere above
       // leaves the interaction unacknowledged and Discord shows "did not respond
