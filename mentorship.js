@@ -82,6 +82,7 @@ function labelFor(qKey, value) {
     const q = QUESTIONS.find(x => x.key === qKey);
     const opt = q?.options.find(o => o.value === value);
     return opt ? `${opt.emoji} ${opt.label}` : '*not selected*';
+}
 
   // -- Panel (posted in the mentorship channel) ------------
 
@@ -201,6 +202,7 @@ function labelFor(qKey, value) {
                       .setPlaceholder(state[q.key] ? `${q.emoji} ${labelFor(q.key, state[q.key])}` : `${q.emoji} ${q.label}`)
                       .addOptions(q.options.map(o => ({ label: o.label, value: o.value, emoji: o.emoji })))
                   )
+              );
 
                                    const allAnswered = QUESTIONS.every(q => state[q.key]);
       const submitRow = new ActionRowBuilder().addComponents(
@@ -426,5 +428,3 @@ async function getOrCreateMentorChannel(guild, applicant, mentorMember) {
       clearChannelHistory,
       handleMentorshipInteraction,
   };
-                                   );
-}
