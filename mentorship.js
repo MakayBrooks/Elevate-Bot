@@ -166,7 +166,7 @@ const QUESTIONS = [
             {
                 label: 'Crypto',
                 value: 'crypto',
-                emoji: '🪙',
+                emoji: '\u{1FA99}',
             },
             {
                 label: 'Not sure yet',
