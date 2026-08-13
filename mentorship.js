@@ -4,6 +4,7 @@ const {
     StringSelectMenuBuilder, MessageFlags, ChannelType, PermissionFlagsBits,
 } = require('discord.js');
 const { getStore, markDirty } = require('./db');
+const { registerTicket } = require('./ticketHub');
 
 const THEME_COLOR = 0xF5F0E8;
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
@@ -378,48 +379,33 @@ async function getOrCreateMentorChannel(guild, applicant, mentorMember) {
                                           channelId: channel.id,
                                           completedAt: Date.now(),
                                 };
-                                save();
+                                  save();
 
-                                if (!reused) {
-                                          await channel.send({ embeds: [buildWelcomeEmbed(interaction.user, mentorUser)] });
-                                }
+                                  if (!reused) {
+                                              await channel.send({ embeds: [buildWelcomeEmbed(interaction.user, mentorUser)] });
+                                  }
 
-                                        // Deliver answers to the mentor privately -- DM only, never in the shared channel
-                                        let delivered = false;
-                                try {
-                                          await mentorUser.send({ embeds: [buildMentorNotifyEmbed(interaction.user, state, channel)] });
-                                          delivered = true;
-                                } catch (err) {
-                                          console.error('[mentorship] Could not DM mentor with application:', err.message);
-                                          const logChId = process.env.MENTORSHIP_LOG_CHANNEL_ID;
-                                          if (logChId) {
-                                                      const logCh = guild.channels.cache.get(logChId);
-                                                      if (logCh) {
-                                                                    await logCh.send({ embeds: [buildMentorNotifyEmbed(interaction.user, state, channel)] }).catch(() => {});
-                                                                    delivered = true;
-                                                      }
-                                          }
-                                }
+                                  // Register with the admin ticket hub -- this is the only place answers are visible
+                                  const answersText = QUESTIONS.map(q => `**${q.label}** ${EM} ${labelFor(q.key, state[q.key])}`).join('\n');
+                                  if (!reused) {
+                                              await registerTicket(guild, channel, { type: 'mentorship', applicant: interaction.user, answersText }).catch(err => console.error('[mentorship] registerTicket error:', err));
+                                  }
 
-                                        await interaction.editReply({
-                                                  embeds: [new EmbedBuilder()
-                                                                     .setColor(0x57F287)
-                                                                     .setDescription(
-                                                                                   `\u{1F389} You${APOS}re in! Head to ${channel} to meet your mentor.` +
-                                                                                   (delivered ? '' : `\n\n⚠️ Your mentor couldn${APOS}t be notified automatically ${EM} they${APOS}ll need to check the bot logs.`)
-                                                                                 )],
-                                                  components: [],
-                                        });
+                                  await interaction.editReply({
+                                              embeds: [new EmbedBuilder()
+                                                                 .setColor(0x57F287)
+                                                                 .setDescription(`\u{1F389} You${APOS}re in! Head to ${channel} to meet your mentor.`)],
+                                              components: [],
+                                  });
                         } catch (err) {
-                                console.error('[mentorship] confirm_yes error:', err);
-                                await interaction.editReply({
-                                          embeds: [new EmbedBuilder().setColor(0xFF5555).setDescription('❌ Something went wrong setting up your mentorship channel. Please contact an admin.')],
-                                          components: [],
-                                }).catch(() => {});
+                                  console.error('[mentorship] confirm_yes error:', err);
+                                  await interaction.editReply({
+                                              embeds: [new EmbedBuilder().setColor(0xFF5555).setDescription('❌ Something went wrong setting up your mentorship channel. Please contact an admin.')],
+                                              components: [],
+                                  }).catch(() => {});
                         }
-                              return true;
+                          return true;
                   }
-
                       return false;
   }
 
