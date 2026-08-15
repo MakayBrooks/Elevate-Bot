@@ -6,6 +6,7 @@ const { generateWelcomeCard } = require('./welcomeCard');
 const { postWeeklyCalendar } = require('./economicCalendar');
 const { handleJournalInteraction, sendJournalPanel } = require('./journal');
 const { postMentorshipPanel, clearChannelHistory: clearMentorshipHistory, handleMentorshipInteraction } = require('./mentorship');
+const { setupTicketHub, onTicketActivity, sweepIdle, handleTicketHubButton } = require('./ticketHub');
 const {
   addXP, handleBoost, updateLeaderboard, initDB,
   postLevelsPanel, postShopPanel,
@@ -114,6 +115,20 @@ client.once('ready', async () => {
           }
     } catch (err) { console.error('❌ Mentorship panel error:', err); }
 
+    // Admin ticket hub — STAFF ONLY category + new-tickets/new-messages/idle-tickets channels
+    try {
+          if (guild) {
+                  await setupTicketHub(guild);
+                  console.log('✅ Ticket hub ready.');
+
+                  await sweepIdle(guild);
+                  setInterval(() => {
+                        sweepIdle(guild).catch(err => console.error('❌ Idle ticket sweep error:', err));
+                  }, 6 * 60 * 60 * 1000);
+                  console.log('⏰ Idle ticket sweep scheduled: every 6 hours.');
+          }
+    } catch (err) { console.error('❌ Ticket hub error:', err); }
+
   startPassiveXP(client);
 
   cron.schedule('0 20 * * 0', async () => {
@@ -143,6 +158,9 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 // Message XP
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
+
+  await onTicketActivity(message.guild, message.channel, message).catch(err => console.error('❌ Ticket activity error:', err));
+
   const now = Date.now();
   const last = xpCooldowns.get(message.author.id) || 0;
   if (now - last < 60000) return;
@@ -176,6 +194,12 @@ client.on('interactionCreate', async (interaction) => {
             (interaction.isButton() && interaction.customId.startsWith('mentorship_')) ||
             (interaction.isStringSelectMenu() && interaction.customId.startsWith('mentorship_'))
           ) { await handleMentorshipInteraction(interaction, client); return; }
+
+      // Admin ticket hub buttons (Acknowledge / Mark Read / Close Ticket)
+      if (interaction.isButton() && interaction.customId.startsWith('hub_')) {
+            await handleTicketHubButton(interaction, guild);
+            return;
+      }
 
   // Rank button
   if (interaction.isButton() && interaction.customId === 'levels_check_rank') { await handleCheckRank(interaction, guild); return; }
