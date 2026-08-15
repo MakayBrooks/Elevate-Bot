@@ -124,7 +124,31 @@ async function loadAll() {
                               }
                   }
 
-                  console.warn('⚠️  Gist reachable but empty — treating as a fresh install.');
+                  // Gist responded but its content is empty/missing. This does NOT mean
+                  // it's safe to wipe — a Gist can look empty because it never
+                  // successfully received a write (e.g. a misscoped token), while the
+                  // local volume still holds the real, current data. Check local before
+                  // deciding this is genuinely a fresh install; otherwise every redeploy
+                  // would clobber real local data with nothing the moment the Gist sync
+                  // is broken. This is the exact bug that wiped XP/levels previously.
+                  const existingLocal = localLoad();
+                          const existingUserCount = Object.keys(existingLocal.levels?.users || {}).length;
+                          const existingJournalCount = Object.keys(existingLocal.journal || {}).length;
+
+                  if (existingUserCount > 0 || existingJournalCount > 0) {
+                              console.warn(
+                                            `⚠️  Gist reachable but empty, while local data has ${existingUserCount} users / ` +
+                                            `${existingJournalCount} journal entries — keeping LOCAL data, NOT overwriting. ` +
+                                            'The Gist looks like it never received a real write (check GITHUB_TOKEN has the `gist` scope).'
+                                          );
+                              _store = existingLocal;
+                              _lastKnownGood = fingerprint(_store);
+                              _gistLoadSucceeded = true;
+                              _loadComplete = true;
+                              return _store;
+                  }
+
+                  console.warn('⚠️  Gist reachable but empty, and local data is also empty — treating as a fresh install.');
                           _store = { levels: { users: {} }, journal: {} };
                           localSave(_store);
                           _lastKnownGood = fingerprint(_store);
