@@ -6,6 +6,7 @@ const {
 const { getStore, markDirty } = require('./db');
 
 const IDLE_MS = 14 * 24 * 60 * 60 * 1000;
+const HUB_CHANNEL_NAME = 'tickets-hub';
 
 function cfg() {
     const s = getStore();
@@ -14,6 +15,13 @@ function cfg() {
     return s._ticketHub;
 }
 function save() { markDirty(); }
+
+// The mentor is the only person allowed to see this channel — survey answers
+// in it are private by design, so access is locked to one specific user
+// rather than any role (an admin/mod role would see them too otherwise).
+function mentorId(guild) {
+    return process.env.MENTOR_USER_ID || guild.ownerId;
+}
 
 async function setupTicketHub(guild) {
     const c = cfg();
@@ -35,18 +43,29 @@ async function setupTicketHub(guild) {
     }
     c.categoryId = cat.id;
 
-  async function getOrCreate(idKey, name) {
-        let ch = c[idKey] ? guild.channels.cache.get(c[idKey]) : null;
-        if (!ch) ch = guild.channels.cache.find(x => x.parentId === cat.id && x.name === name);
-        if (!ch) ch = await guild.channels.create({ name, type: ChannelType.GuildText, parent: cat.id });
-        c[idKey] = ch.id;
-        return ch;
-  }
+  // Lock the hub channel to the mentor + bot only, regardless of who the
+  // category itself is open to. Explicitly deny every role/member the
+  // category currently grants view access to, so nothing is inherited —
+  // then explicitly allow only the mentor and the bot.
+  const mentor = mentorId(guild);
+    const overwrites = [];
+    for (const [id] of cat.permissionOverwrites.cache) {
+          overwrites.push({ id, deny: [PermissionFlagsBits.ViewChannel] });
+    }
+    overwrites.push({ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] });
+    overwrites.push({ id: guild.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    overwrites.push({ id: mentor, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory] });
 
-  await getOrCreate('newChId', 'new-tickets');
-    await getOrCreate('messagesChId', 'new-messages');
-    await getOrCreate('idleChId', 'idle-tickets');
-    save();
+  let hubCh = c.hubChId ? guild.channels.cache.get(c.hubChId) : null;
+    if (!hubCh) hubCh = guild.channels.cache.find(x => x.parentId === cat.id && x.name === HUB_CHANNEL_NAME);
+    if (!hubCh) {
+          hubCh = await guild.channels.create({ name: HUB_CHANNEL_NAME, type: ChannelType.GuildText, parent: cat.id, permissionOverwrites: overwrites });
+    } else {
+          await hubCh.permissionOverwrites.set(overwrites).catch(() => {});
+    }
+    c.hubChId = hubCh.id;
+
+  save();
     return c;
 }
 
@@ -79,7 +98,7 @@ async function postNewCard(guild, channelId) {
     const c = cfg();
     const t = c.tickets[channelId];
     if (!t) return;
-    const hubCh = guild.channels.cache.get(c.newChId);
+    const hubCh = guild.channels.cache.get(c.hubChId);
     if (!hubCh) return;
     const btn = new ButtonBuilder().setCustomId('hub_ack_' + channelId).setLabel('Acknowledge').setEmoji('✅').setStyle(ButtonStyle.Success);
     const msg = await hubCh.send({ embeds: [buildNewEmbed(t, channelId)], components: [linkRow(channelId, btn)] }).catch(() => null);
@@ -119,9 +138,10 @@ async function onTicketActivity(guild, channel, message) {
     if (!t) return;
     t.lastActivityAt = Date.now();
 
-    if (t.idleCardMsgId) {
-          const idleCh = guild.channels.cache.get(c.idleChId);
-          if (idleCh) await idleCh.messages.delete(t.idleCardMsgId).catch(() => {});
+    const hubCh = guild.channels.cache.get(c.hubChId);
+
+  if (t.idleCardMsgId) {
+          if (hubCh) await hubCh.messages.delete(t.idleCardMsgId).catch(() => {});
           delete t.idleCardMsgId;
     }
 
@@ -130,10 +150,9 @@ async function onTicketActivity(guild, channel, message) {
     if (!t.unread) {
           t.unread = true;
           save();
-          const msgCh = guild.channels.cache.get(c.messagesChId);
-          if (msgCh) {
+          if (hubCh) {
                   const btn = new ButtonBuilder().setCustomId('hub_read_' + channel.id).setLabel('Mark Read').setEmoji('\u{1F4EC}').setStyle(ButtonStyle.Secondary);
-                  const msg = await msgCh.send({ embeds: [buildMsgEmbed(t, channel.id, message.content)], components: [linkRow(channel.id, btn)] }).catch(() => null);
+                  const msg = await hubCh.send({ embeds: [buildMsgEmbed(t, channel.id, message.content)], components: [linkRow(channel.id, btn)] }).catch(() => null);
                   if (msg) { t.msgCardMsgId = msg.id; save(); }
           }
     } else {
@@ -154,8 +173,8 @@ function buildIdleEmbed(ticket, channelId) {
 
 async function sweepIdle(guild) {
     const c = cfg();
-    const idleCh = guild.channels.cache.get(c.idleChId);
-    if (!idleCh) return;
+    const hubCh = guild.channels.cache.get(c.hubChId);
+    if (!hubCh) return;
     const now = Date.now();
     for (const [channelId, t] of Object.entries(c.tickets)) {
           if (t.idleCardMsgId) continue;
@@ -163,7 +182,7 @@ async function sweepIdle(guild) {
           const channel = guild.channels.cache.get(channelId);
           if (!channel) { delete c.tickets[channelId]; continue; }
           const btn = new ButtonBuilder().setCustomId('hub_close_' + channelId).setLabel('Close Ticket').setEmoji('\u{1F5D1}️').setStyle(ButtonStyle.Danger);
-          const msg = await idleCh.send({ embeds: [buildIdleEmbed(t, channelId)], components: [linkRow(channelId, btn)] }).catch(() => null);
+          const msg = await hubCh.send({ embeds: [buildIdleEmbed(t, channelId)], components: [linkRow(channelId, btn)] }).catch(() => null);
           if (msg) t.idleCardMsgId = msg.id;
     }
     save();
