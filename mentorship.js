@@ -461,13 +461,36 @@ async function findMentorshipCategory(guild) {
         }
     }
 
-    return (
-        guild.channels.cache.find(
-            ch =>
-                ch.type === ChannelType.GuildCategory &&
-                ch.name.toLowerCase().includes('mentor')
-        ) || null
+    const existing = guild.channels.cache.find(
+        ch =>
+            ch.type === ChannelType.GuildCategory &&
+            ch.name.toLowerCase().includes('mentor')
     );
+
+    if (existing) return existing;
+
+    // No category to put mentee channels under — without one, each new
+    // private channel lands with no parent, which puts it at the very top
+    // of the server's channel list instead of tucked away. Create one so
+    // that never happens.
+    return guild.channels.create({
+        name: '\u{1F393} MENTORSHIP',
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+            {
+                id: guild.roles.everyone.id,
+                deny: [PermissionFlagsBits.ViewChannel],
+            },
+            {
+                id: guild.client.user.id,
+                allow: [
+                    PermissionFlagsBits.ViewChannel,
+                    PermissionFlagsBits.SendMessages,
+                    PermissionFlagsBits.ManageChannels,
+                ],
+            },
+        ],
+    }).catch(() => null);
 }
 
 async function getOrCreateMentorChannel(
