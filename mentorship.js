@@ -6,12 +6,10 @@ const {
     ButtonBuilder,
     ButtonStyle,
     StringSelectMenuBuilder,
-    ChannelType,
-    PermissionFlagsBits,
 } = require('discord.js');
 
 const { getStore, markDirty } = require('./db');
-const { registerTicket } = require('./ticketHub');
+const { registerTicket, getOrCreateTicketThread } = require('./ticketHub');
 
 const THEME_COLOR = 0xF5F0E8;
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
@@ -437,152 +435,6 @@ function buildConfirmMessage(state) {
     };
 }
 
-// -- Private mentor channel creation ------------------------
-
-function sanitizeChannelName(username) {
-    const clean = username
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-
-    return `mentee-${clean || 'user'}`;
-}
-
-async function findMentorshipCategory(guild) {
-    await guild.channels.fetch().catch(() => {});
-
-    if (process.env.MENTORSHIP_CATEGORY_ID) {
-        const cat = guild.channels.cache.get(
-            process.env.MENTORSHIP_CATEGORY_ID
-        );
-
-        if (cat) {
-            return cat;
-        }
-    }
-
-    const existing = guild.channels.cache.find(
-        ch =>
-            ch.type === ChannelType.GuildCategory &&
-            ch.name.toLowerCase().includes('mentor')
-    );
-
-    if (existing) return existing;
-
-    // No category to put mentee channels under — without one, each new
-    // private channel lands with no parent, which puts it at the very top
-    // of the server's channel list instead of tucked away. Create one so
-    // that never happens.
-    return guild.channels.create({
-        name: '\u{1F393} MENTORSHIP',
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [
-            {
-                id: guild.roles.everyone.id,
-                deny: [PermissionFlagsBits.ViewChannel],
-            },
-            {
-                id: guild.client.user.id,
-                allow: [
-                    PermissionFlagsBits.ViewChannel,
-                    PermissionFlagsBits.SendMessages,
-                    PermissionFlagsBits.ManageChannels,
-                ],
-            },
-        ],
-    }).catch(() => null);
-}
-
-async function getOrCreateMentorChannel(
-    guild,
-    applicant,
-    mentorMember
-) {
-    const c = cfg();
-
-    const existingId =
-        c.applications[applicant.id]?.channelId;
-
-    if (existingId) {
-        const existing =
-            guild.channels.cache.get(existingId) ||
-            await guild.channels
-                .fetch(existingId)
-                .catch(() => null);
-
-        if (existing) {
-            return {
-                channel: existing,
-                reused: true,
-            };
-        }
-    }
-
-    const category =
-        await findMentorshipCategory(guild);
-
-    const overwrites = [
-        {
-            id: guild.roles.everyone.id,
-            deny: [
-                PermissionFlagsBits.ViewChannel,
-            ],
-        },
-
-        {
-            id: guild.client.user.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ManageChannels,
-            ],
-        },
-
-        {
-            id: applicant.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.AttachFiles,
-            ],
-        },
-    ];
-
-    if (mentorMember) {
-        overwrites.push({
-            id: mentorMember.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.ManageMessages,
-            ],
-        });
-    }
-
-    const channel = await guild.channels.create({
-        name: sanitizeChannelName(
-            applicant.username
-        ),
-
-        type: ChannelType.GuildText,
-
-        parent: category
-            ? category.id
-            : undefined,
-
-        topic: `Private mentorship space for ${applicant.tag}`,
-
-        permissionOverwrites: overwrites,
-    });
-
-    return {
-        channel,
-        reused: false,
-    };
-}
-
 function buildWelcomeEmbed(
     applicant,
     mentorUser
@@ -912,30 +764,31 @@ async function handleMentorshipInteraction(
                 return true;
             }
 
+            const c = cfg();
+
             const {
-                channel,
+                thread,
                 reused,
             } =
-                await getOrCreateMentorChannel(
+                await getOrCreateTicketThread(
                     guild,
                     interaction.user,
-                    mentorMember
+                    mentorMember,
+                    c.applications[interaction.user.id]?.threadId
                 );
-
-            const c = cfg();
 
             c.applications[
                 interaction.user.id
             ] = {
                 answers: state,
-                channelId: channel.id,
+                threadId: thread.id,
                 completedAt: Date.now(),
             };
 
             save();
 
             if (!reused) {
-                await channel.send({
+                await thread.send({
                     embeds: [
                         buildWelcomeEmbed(
                             interaction.user,
@@ -958,7 +811,7 @@ async function handleMentorshipInteraction(
             if (!reused) {
                 await registerTicket(
                     guild,
-                    channel,
+                    thread,
                     {
                         type: 'mentorship',
                         applicant:
@@ -978,7 +831,7 @@ async function handleMentorshipInteraction(
                     new EmbedBuilder()
                         .setColor(0x57F287)
                         .setDescription(
-                            `\u{1F389} You${APOS}re in! Head to ${channel} to meet your mentor.`
+                            `\u{1F389} You${APOS}re in! Head to ${thread} to meet your mentor.`
                         ),
                 ],
                 components: [],
@@ -997,7 +850,7 @@ async function handleMentorshipInteraction(
                         new EmbedBuilder()
                             .setColor(0xFF5555)
                             .setDescription(
-                                '❌ Something went wrong setting up your mentorship channel. Please contact an admin.'
+                                '❌ Something went wrong setting up your mentorship space. Please contact an admin.'
                             ),
                     ],
                     components: [],
