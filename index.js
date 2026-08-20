@@ -6,6 +6,7 @@ const { generateWelcomeCard } = require('./welcomeCard');
 const { postWeeklyCalendar } = require('./economicCalendar');
 const { handleJournalInteraction, sendJournalPanel } = require('./journal');
 const { postMentorshipPanel, clearChannelHistory: clearMentorshipHistory, handleMentorshipInteraction } = require('./mentorship');
+const { signHubUrl } = require('./hubAuth');
 const { setupTicketHub, onTicketActivity, sweepIdle, handleTicketHubButton } = require('./ticketHub');
 const {
   addXP, handleBoost, updateLeaderboard, initDB,
@@ -470,14 +471,17 @@ client.on('interactionCreate', async (interaction) => {
           )
           .setFooter({ text: 'Elevate 🪽 • Mentorship Hub' });
 
+        const hubUrl = signHubUrl(interaction.user.id, interaction.user.username)
+          || 'https://mentorship-hub-production.up.railway.app';
+
         const hubRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setLabel('Open Mentorship Hub')
-            .setURL('https://mentorship-hub-production.up.railway.app')
+            .setURL(hubUrl)
             .setStyle(ButtonStyle.Link),
         );
 
-        await interaction.reply({ embeds: [hubEmbed], components: [hubRow] });
+        await interaction.reply({ embeds: [hubEmbed], components: [hubRow], ephemeral: true });
       }
 } catch (err) {
               // Last-resort safety net: without this, an uncaught error anywhere above
