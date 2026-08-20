@@ -140,40 +140,97 @@ async function getOrCreateTicketThread(guild, applicant, mentorMember, existingT
   return { thread, reused: false };
 }
 
-// -- Card builders ------------------------------------
+// -- Dashboard (single pinned, continuously-updated message) --------------
+//
+// Individual per-ticket cards used to get deleted the moment you acted on
+// them (Acknowledge / Mark Read / Close), so there was no way back to a
+// ticket once you'd touched it. Instead there's now one pinned message,
+// re-rendered in place on every relevant event, sorted into three buckets:
+// unread, active, and idle. Every ticket stays a clickable thread mention
+// for as long as it exists — nothing about it ever gets deleted.
 
-function linkRow(threadId, extraButton) {
-    const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setLabel('Open Thread').setStyle(ButtonStyle.Link)
-            .setURL(`https://discord.com/channels/${process.env.GUILD_ID}/${threadId}`)
-        );
-    if (extraButton) row.addComponents(extraButton);
-    return row;
+const SECTION_LIMIT = 15;
+
+function relativeTime(ts) {
+    const diffMs = Date.now() - ts;
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
 }
 
-function buildNewEmbed(ticket, threadId) {
-    const e = new EmbedBuilder()
-      .setColor(0xF5C518)
-      .setAuthor({ name: ticket.applicantTag, iconURL: ticket.applicantAvatar })
-      .setTitle('\u{1F195} New ' + (ticket.type === 'mentorship' ? 'Mentorship Application' : 'Ticket'))
+function ticketLine(threadId, t) {
+    return `<#${threadId}> — **${t.applicantTag}** — ${relativeTime(t.lastActivityAt)}`;
+}
+
+function renderSection(list, emptyText) {
+    if (list.length === 0) return emptyText;
+    const lines = list.slice(0, SECTION_LIMIT).map(([id, t]) => ticketLine(id, t));
+    if (list.length > SECTION_LIMIT) lines.push(`*...and ${list.length - SECTION_LIMIT} more*`);
+    return lines.join('\n');
+}
+
+function buildDashboardEmbed(c) {
+    const now = Date.now();
+    const entries = Object.entries(c.tickets);
+
+    const idle = [];
+    const unread = [];
+    const active = [];
+
+    for (const entry of entries) {
+          const [, t] = entry;
+          if (now - t.lastActivityAt >= IDLE_MS) idle.push(entry);
+          else if (t.unread) unread.push(entry);
+          else active.push(entry);
+    }
+
+    idle.sort((a, b) => a[1].lastActivityAt - b[1].lastActivityAt);
+    unread.sort((a, b) => b[1].lastActivityAt - a[1].lastActivityAt);
+    active.sort((a, b) => b[1].lastActivityAt - a[1].lastActivityAt);
+
+    return new EmbedBuilder()
+      .setColor(0xF5F0E8)
+      .setTitle('\u{1F39F}️ Mentorship Tickets')
+      .setDescription(
+            `**${entries.length}** total · ${active.length} active · ${unread.length} unread · ${idle.length} idle (14d+)`
+          )
       .addFields(
-        { name: 'Thread', value: `<#${threadId}>`, inline: true },
-        { name: 'Opened', value: `<t:${Math.floor(ticket.openedAt / 1000)}:R>`, inline: true }
-            )
+            { name: `\u{1F4AC} New Messages (${unread.length})`, value: renderSection(unread, '*No unread messages.*'), inline: false },
+            { name: `✅ Active (${active.length})`, value: renderSection(active, '*No active tickets.*'), inline: false },
+            { name: `\u{1F634} Idle 14d+ (${idle.length})`, value: renderSection(idle, '*No idle tickets.*'), inline: false },
+          )
+      .setFooter({ text: 'Auto-updates on new tickets, messages, and idle sweeps · Refresh to force a redraw' })
       .setTimestamp();
-    if (ticket.answersText) e.addFields({ name: '\u{1F4CB} Survey Answers', value: ticket.answersText, inline: false });
-    return e;
 }
 
-async function postNewCard(guild, threadId) {
+async function renderDashboard(guild) {
     const c = cfg();
-    const t = c.tickets[threadId];
-    if (!t) return;
     const hubCh = guild.channels.cache.get(c.hubChId);
     if (!hubCh) return;
-    const btn = new ButtonBuilder().setCustomId('hub_ack_' + threadId).setLabel('Acknowledge').setEmoji('✅').setStyle(ButtonStyle.Success);
-    const msg = await hubCh.send({ embeds: [buildNewEmbed(t, threadId)], components: [linkRow(threadId, btn)] }).catch(() => null);
-    if (msg) { t.newCardMsgId = msg.id; save(); }
+
+    const embed = buildDashboardEmbed(c);
+    const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('hub_refresh').setLabel('Refresh').setEmoji('\u{1F504}').setStyle(ButtonStyle.Secondary)
+        );
+
+    if (c.dashboardMsgId) {
+          const existing = await hubCh.messages.fetch(c.dashboardMsgId).catch(() => null);
+          if (existing) {
+                await existing.edit({ embeds: [embed], components: [row] }).catch(() => {});
+                return;
+          }
+    }
+
+    const msg = await hubCh.send({ embeds: [embed], components: [row] }).catch(() => null);
+    if (msg) {
+          c.dashboardMsgId = msg.id;
+          save();
+          await msg.pin().catch(() => {});
+    }
 }
 
 async function registerTicket(guild, thread, { type, applicant, answersText }) {
@@ -186,77 +243,32 @@ async function registerTicket(guild, thread, { type, applicant, answersText }) {
           answersText: answersText || null,
           openedAt: Date.now(),
           lastActivityAt: Date.now(),
-          acknowledged: false,
           unread: false,
     };
     save();
-    await postNewCard(guild, thread.id);
+    await renderDashboard(guild);
 }
 
-function buildMsgEmbed(ticket, threadId, preview) {
-    return new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setAuthor({ name: ticket.applicantTag, iconURL: ticket.applicantAvatar })
-      .setTitle('\u{1F4AC} New Message')
-      .setDescription(preview ? preview.slice(0, 200) : '*attachment/embed*')
-      .addFields({ name: 'Thread', value: `<#${threadId}>`, inline: true })
-      .setTimestamp();
-}
-
+// Read state is fully automatic now: the applicant messaging marks a
+// ticket unread, and the mentor/staff replying in the thread marks it
+// read again — no separate "Acknowledge"/"Mark Read" click needed.
 async function onTicketActivity(guild, channel, message) {
     const c = cfg();
     const t = c.tickets[channel.id];
     if (!t) return;
+
     t.lastActivityAt = Date.now();
+    t.unread = message.author.id === t.applicantId;
+    save();
 
-    const hubCh = guild.channels.cache.get(c.hubChId);
-
-  if (t.idleCardMsgId) {
-          if (hubCh) await hubCh.messages.delete(t.idleCardMsgId).catch(() => {});
-          delete t.idleCardMsgId;
-    }
-
-    if (message.author.id !== t.applicantId) { save(); return; }
-
-    if (!t.unread) {
-          t.unread = true;
-          save();
-          if (hubCh) {
-                  const btn = new ButtonBuilder().setCustomId('hub_read_' + channel.id).setLabel('Mark Read').setEmoji('\u{1F4EC}').setStyle(ButtonStyle.Secondary);
-                  const msg = await hubCh.send({ embeds: [buildMsgEmbed(t, channel.id, message.content)], components: [linkRow(channel.id, btn)] }).catch(() => null);
-                  if (msg) { t.msgCardMsgId = msg.id; save(); }
-          }
-    } else {
-          save();
-    }
-}
-
-function buildIdleEmbed(ticket, threadId) {
-    const days = Math.floor((Date.now() - ticket.lastActivityAt) / (24 * 60 * 60 * 1000));
-    return new EmbedBuilder()
-      .setColor(0xAAAAAA)
-      .setAuthor({ name: ticket.applicantTag, iconURL: ticket.applicantAvatar })
-      .setTitle('⏰ Idle Ticket')
-      .setDescription(`No activity for **${days} days**.`)
-      .addFields({ name: 'Thread', value: `<#${threadId}>`, inline: true })
-      .setTimestamp();
+    await renderDashboard(guild);
 }
 
 async function sweepIdle(guild) {
-    const c = cfg();
-    const hubCh = guild.channels.cache.get(c.hubChId);
-    if (!hubCh) return;
-    const now = Date.now();
-    for (const [threadId, t] of Object.entries(c.tickets)) {
-          if (t.idleCardMsgId) continue;
-          if (now - t.lastActivityAt < IDLE_MS) continue;
-          const thread = await fetchThread(guild, threadId);
-          if (!thread) { delete c.tickets[threadId]; continue; }
-          const btn = new ButtonBuilder().setCustomId('hub_close_' + threadId).setLabel('Close Ticket').setEmoji('\u{1F5D1}️').setStyle(ButtonStyle.Danger);
-          const msg = await hubCh.send({ embeds: [buildIdleEmbed(t, threadId)], components: [linkRow(threadId, btn)] }).catch(() => null);
-          if (msg) t.idleCardMsgId = msg.id;
-    }
-    save();
+    // Idle status is computed live from lastActivityAt at render time, so a
+    // sweep is just a periodic redraw to catch tickets that crossed the 14
+    // day mark without any new activity to trigger a render on their own.
+    await renderDashboard(guild);
 }
 
 // -- Button router ------------------------------------
@@ -264,32 +276,10 @@ async function sweepIdle(guild) {
 async function handleTicketHubButton(interaction, guild) {
     const id = interaction.customId;
     if (!id.startsWith('hub_')) return false;
-    const c = cfg();
 
-    if (id.startsWith('hub_ack_')) {
-          const threadId = id.replace('hub_ack_', '');
-          const t = c.tickets[threadId];
-          if (t) { t.acknowledged = true; delete t.newCardMsgId; save(); }
-          await interaction.message.delete().catch(() => {});
-          return true;
-    }
-
-    if (id.startsWith('hub_read_')) {
-          const threadId = id.replace('hub_read_', '');
-          const t = c.tickets[threadId];
-          if (t) { t.unread = false; delete t.msgCardMsgId; save(); }
-          await interaction.message.delete().catch(() => {});
-          return true;
-    }
-
-    if (id.startsWith('hub_close_')) {
-          const threadId = id.replace('hub_close_', '');
+    if (id === 'hub_refresh') {
           await interaction.deferUpdate().catch(() => {});
-          const thread = await fetchThread(guild, threadId);
-          if (thread) await thread.delete().catch(() => {});
-          delete c.tickets[threadId];
-          save();
-          await interaction.message.delete().catch(() => {});
+          await renderDashboard(guild);
           return true;
     }
 
