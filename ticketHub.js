@@ -1,7 +1,7 @@
 'use strict';
 const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-    ChannelType, PermissionFlagsBits,
+    StringSelectMenuBuilder, ChannelType, PermissionFlagsBits,
 } = require('discord.js');
 const { getStore, markDirty } = require('./db');
 
@@ -207,25 +207,62 @@ function buildDashboardEmbed(c) {
       .setTimestamp();
 }
 
+function ticketOptionLabel(t) {
+    const label = t.applicantTag && t.applicantTag.length <= 100 ? t.applicantTag : 'Unknown user';
+    return { label, description: `${relativeTime(t.lastActivityAt)}` };
+}
+
+function buildDashboardComponents(c) {
+    const rows = [];
+    const entries = Object.entries(c.tickets);
+
+    const unread = entries.filter(([, t]) => t.unread);
+    if (unread.length > 0) {
+          const sorted = unread.sort((a, b) => b[1].lastActivityAt - a[1].lastActivityAt).slice(0, 25);
+          rows.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                  .setCustomId('hub_markread_select')
+                  .setPlaceholder('✅ Mark a ticket active (read)...')
+                  .addOptions(sorted.map(([id, t]) => ({ value: id, ...ticketOptionLabel(t) })))
+              ));
+    }
+
+    if (entries.length > 0) {
+          // Oldest activity first — idle/abandoned tickets are the ones most
+          // likely to actually get deleted, so put them within easy reach.
+          const sorted = [...entries].sort((a, b) => a[1].lastActivityAt - b[1].lastActivityAt).slice(0, 25);
+          rows.push(new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                  .setCustomId('hub_delete_select')
+                  .setPlaceholder('\u{1F5D1}️ Delete a ticket...')
+                  .addOptions(sorted.map(([id, t]) => ({ value: id, ...ticketOptionLabel(t) })))
+              ));
+    }
+
+    rows.push(new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('hub_refresh').setLabel('Refresh').setEmoji('\u{1F504}').setStyle(ButtonStyle.Secondary)
+        ));
+
+    return rows;
+}
+
 async function renderDashboard(guild) {
     const c = cfg();
     const hubCh = guild.channels.cache.get(c.hubChId);
     if (!hubCh) return;
 
     const embed = buildDashboardEmbed(c);
-    const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('hub_refresh').setLabel('Refresh').setEmoji('\u{1F504}').setStyle(ButtonStyle.Secondary)
-        );
+    const components = buildDashboardComponents(c);
 
     if (c.dashboardMsgId) {
           const existing = await hubCh.messages.fetch(c.dashboardMsgId).catch(() => null);
           if (existing) {
-                await existing.edit({ embeds: [embed], components: [row] }).catch(() => {});
+                await existing.edit({ embeds: [embed], components }).catch(() => {});
                 return;
           }
     }
 
-    const msg = await hubCh.send({ embeds: [embed], components: [row] }).catch(() => null);
+    const msg = await hubCh.send({ embeds: [embed], components }).catch(() => null);
     if (msg) {
           c.dashboardMsgId = msg.id;
           save();
@@ -271,15 +308,59 @@ async function sweepIdle(guild) {
     await renderDashboard(guild);
 }
 
-// -- Button router ------------------------------------
+// -- Dashboard interaction router (buttons + select menus) ----------------
 
 async function handleTicketHubButton(interaction, guild) {
     const id = interaction.customId;
     if (!id.startsWith('hub_')) return false;
+    const c = cfg();
 
     if (id === 'hub_refresh') {
           await interaction.deferUpdate().catch(() => {});
           await renderDashboard(guild);
+          return true;
+    }
+
+    if (interaction.isStringSelectMenu() && id === 'hub_markread_select') {
+          const threadId = interaction.values[0];
+          const t = c.tickets[threadId];
+          if (t) { t.unread = false; save(); }
+          await interaction.deferUpdate().catch(() => {});
+          await renderDashboard(guild);
+          return true;
+    }
+
+    if (interaction.isStringSelectMenu() && id === 'hub_delete_select') {
+          const threadId = interaction.values[0];
+          const t = c.tickets[threadId];
+          const label = t ? t.applicantTag : 'this ticket';
+          await interaction.reply({
+                content: `Delete the ticket for **${label}**? This permanently deletes the thread and its message history.`,
+                components: [
+                      new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId(`hub_delete_confirm_${threadId}`).setLabel('Delete').setEmoji('\u{1F5D1}️').setStyle(ButtonStyle.Danger),
+                            new ButtonBuilder().setCustomId('hub_delete_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+                          ),
+                    ],
+                ephemeral: true,
+          });
+          return true;
+    }
+
+    if (id.startsWith('hub_delete_confirm_')) {
+          const threadId = id.replace('hub_delete_confirm_', '');
+          await interaction.deferUpdate().catch(() => {});
+          const thread = await fetchThread(guild, threadId);
+          if (thread) await thread.delete().catch(() => {});
+          delete c.tickets[threadId];
+          save();
+          await renderDashboard(guild);
+          await interaction.editReply({ content: '\u{1F5D1}️ Ticket deleted.', components: [] }).catch(() => {});
+          return true;
+    }
+
+    if (id === 'hub_delete_cancel') {
+          await interaction.update({ content: 'Cancelled — nothing was deleted.', components: [] }).catch(() => {});
           return true;
     }
 

@@ -196,8 +196,11 @@ client.on('interactionCreate', async (interaction) => {
             (interaction.isStringSelectMenu() && interaction.customId.startsWith('mentorship_'))
           ) { await handleMentorshipInteraction(interaction, client); return; }
 
-      // Admin ticket dashboard buttons (Refresh)
-      if (interaction.isButton() && interaction.customId.startsWith('hub_')) {
+      // Admin ticket dashboard (Refresh, Mark Read / Delete selects, delete confirm)
+      if (
+            (interaction.isButton() && interaction.customId.startsWith('hub_')) ||
+            (interaction.isStringSelectMenu() && interaction.customId.startsWith('hub_'))
+          ) {
             await handleTicketHubButton(interaction, guild);
             return;
       }
