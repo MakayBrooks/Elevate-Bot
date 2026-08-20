@@ -109,17 +109,24 @@ function sanitizeThreadName(username) {
     return `mentee-${clean || 'user'}`;
 }
 
-async function getOrCreateTicketThread(guild, applicant, mentorMember, existingThreadId) {
-    const c = cfg();
-    const hubCh = guild.channels.cache.get(c.hubChId);
-    if (!hubCh) throw new Error('Ticket hub channel is not set up yet');
+// parentChannel must be a channel the applicant can actually see (e.g. the
+// public mentorship channel the panel button lives in) — NOT the STAFF ONLY
+// hub channel. Private-thread membership only grants access to that one
+// thread; it doesn't grant access to a parent channel the applicant has no
+// view permission on, which is what made every mentee's ticket unreachable.
+async function getOrCreateTicketThread(guild, applicant, mentorMember, existingThreadId, parentChannel) {
+    if (!parentChannel) throw new Error('getOrCreateTicketThread requires a member-visible parent channel');
 
   if (existingThreadId) {
         const existing = await fetchThread(guild, existingThreadId);
-        if (existing) return { thread: existing, reused: true };
+        if (existing) {
+              if (existing.parentId === parentChannel.id) return { thread: existing, reused: true };
+              // Stale thread from before tickets were parented to a visible channel — replace it.
+              await existing.delete().catch(() => {});
+        }
   }
 
-  const thread = await hubCh.threads.create({
+  const thread = await parentChannel.threads.create({
         name: sanitizeThreadName(applicant.username),
         type: ChannelType.PrivateThread,
         invitable: false,

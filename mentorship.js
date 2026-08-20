@@ -257,7 +257,8 @@ async function handleMentorshipInteraction(interaction, client) {
                 guild,
                 interaction.user,
                 mentorMember,
-                c.applications[interaction.user.id]?.threadId
+                c.applications[interaction.user.id]?.threadId,
+                interaction.channel
             );
 
             c.applications[interaction.user.id] = {
