@@ -79,4 +79,8 @@ module.exports = [
         { name: '\u{1F31F} Veteran badge', value: 'badge_veteran' },
       )),
 
+  new SlashCommandBuilder()
+    .setName('mentorship-hub')
+    .setDescription('Open the Mentorship Hub \u2014 your personal notes & learning tracker'),
+
 ].map(cmd => cmd.toJSON());

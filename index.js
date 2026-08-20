@@ -454,6 +454,31 @@ client.on('interactionCreate', async (interaction) => {
                     await interaction.editReply('❌ Error: ' + err.message);
             }
       }
+
+      // /mentorship-hub -- link out to the Mentorship Hub personal notes/learning site
+      if (interaction.commandName === 'mentorship-hub') {
+        const hubEmbed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('🎓 Mentorship Hub')
+          .setDescription('Your personal learning platform for organizing notes, tracking educational content, and managing your growth journey.')
+          .addFields(
+            {
+              name: '✨ Features',
+              value: '📝 Take notes\n📹 Track videos\n✅ Mark progress\n🔐 Private & secure — your data is yours alone',
+              inline: false,
+            }
+          )
+          .setFooter({ text: 'Elevate 🪽 • Mentorship Hub' });
+
+        const hubRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel('Open Mentorship Hub')
+            .setURL('https://mentorship-hub-production.up.railway.app')
+            .setStyle(ButtonStyle.Link),
+        );
+
+        await interaction.reply({ embeds: [hubEmbed], components: [hubRow] });
+      }
 } catch (err) {
               // Last-resort safety net: without this, an uncaught error anywhere above
       // leaves the interaction unacknowledged and Discord shows "did not respond
