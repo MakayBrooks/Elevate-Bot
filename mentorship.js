@@ -282,6 +282,13 @@ async function handleMentorshipInteraction(interaction, client) {
                 }).catch(err =>
                     console.error('[mentorship] registerTicket error:', err)
                 );
+
+                // Archive right away so it drops out of the channel's active-threads
+                // list for anyone with Manage Threads (i.e. staff) — the mentee can
+                // still open it any time via the link above, and posting in it
+                // auto-unarchives it. All real ticket tracking (new/unread/idle)
+                // happens through the staff hub cards, not this list.
+                await thread.setArchived(true).catch(() => {});
             }
 
             await interaction.editReply({
