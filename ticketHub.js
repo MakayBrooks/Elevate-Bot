@@ -114,13 +114,39 @@ function sanitizeThreadName(username) {
 // hub channel. Private-thread membership only grants access to that one
 // thread; it doesn't grant access to a parent channel the applicant has no
 // view permission on, which is what made every mentee's ticket unreachable.
+// Being a thread member only grants visibility, not the ability to post.
+// Posting in a thread requires Send Messages in Threads on the PARENT
+// channel, and if that channel's own role permissions don't grant it to
+// regular members (common on a channel meant to just host a panel), the
+// mentee ends up able to open their ticket but never type in it. A
+// member-specific overwrite guarantees send access regardless of the
+// channel's general policy, without changing anything for anyone else.
+// Re-applied on every click (not just thread creation) so it also repairs
+// already-existing tickets that were created before this fix.
+async function grantApplicantThreadAccess(parentChannel, thread, applicant, mentorMember) {
+    await thread.members.add(applicant.id).catch(() => {});
+    if (mentorMember) await thread.members.add(mentorMember.id).catch(() => {});
+
+    await parentChannel.permissionOverwrites.edit(applicant.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          SendMessagesInThreads: true,
+          ReadMessageHistory: true,
+    }).catch(err => {
+          console.error(`[ticketHub] Could not grant ${applicant.tag} send access on #${parentChannel.name}: ${err.message}`);
+    });
+}
+
 async function getOrCreateTicketThread(guild, applicant, mentorMember, existingThreadId, parentChannel) {
     if (!parentChannel) throw new Error('getOrCreateTicketThread requires a member-visible parent channel');
 
   if (existingThreadId) {
         const existing = await fetchThread(guild, existingThreadId);
         if (existing) {
-              if (existing.parentId === parentChannel.id) return { thread: existing, reused: true };
+              if (existing.parentId === parentChannel.id) {
+                    await grantApplicantThreadAccess(parentChannel, existing, applicant, mentorMember);
+                    return { thread: existing, reused: true };
+              }
               // Stale thread from before tickets were parented to a visible channel — replace it.
               await existing.delete().catch(() => {});
         }
@@ -134,8 +160,7 @@ async function getOrCreateTicketThread(guild, applicant, mentorMember, existingT
         reason: `Private mentorship space for ${applicant.tag}`,
   });
 
-  await thread.members.add(applicant.id).catch(() => {});
-    if (mentorMember) await thread.members.add(mentorMember.id).catch(() => {});
+  await grantApplicantThreadAccess(parentChannel, thread, applicant, mentorMember);
 
   return { thread, reused: false };
 }
